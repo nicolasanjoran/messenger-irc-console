@@ -46,6 +46,8 @@ void disconnectClient(int client);
 
 int transmit(int client, char* message);
 
+void analyzeFrame(char* frame);
+
 int printStatus();
 //==========================================================================//
 
@@ -82,9 +84,8 @@ int main(void)
     if (n == -1)
       perror("recvfrom");
     else {
-      printf("received from %s: %s\n",
-          inet_ntoa(client_addr.sin_addr), msgbuf);
-      sendto(sd, "OK", sizeof("OK"), 0, (struct sockaddr *)&client_addr, addr_len);
+      printf("received from %s: %s\n", inet_ntoa(client_addr.sin_addr), msgbuf);
+      //sendto(sd, "OK", sizeof("OK"), 0, (struct sockaddr *)&client_addr, addr_len);
     }
   }
   return 0;
