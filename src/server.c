@@ -37,35 +37,100 @@ struct sockaddr_in client_addr, server_addr;
 socklen_t addr_len;
 int sd;
 int nbConnectedClients;
+int nbActiveChannels;
 //==========================================================================//
 
 
 //============================ Fonctions ===================================//
 
-init()
+void init()
 {
 	int i;
+	nbConnectedClients = 0;
+	nbActiveChannels = 0;
+
 	for(i=0 ; i<MAX_CLIENTS ; i++)
 	{
 		clients[i].idClient = -1;
-		clients[i].name = NULL;
+		clients[i].name = "";
 	}
 
 	for(i=0 ; i<MAX_CHANNELS ; i++)
 	{
 		channels[i].idChannel = -1;
-		channels[i].name = NULL;
+		channels[i].name = "";
 		channels[i].nbClients = 0;
 	}
 }
 
-// Return the idChannel
-int CHANNEL_JoinClient(int client, char* channel)
+// Returns -1 if client does not exist.
+int getIdClient(int idClient)
 {
-	return 0;
+	int i;
+	int clientExists = -1;
+	for(i=0 ; i<MAX_CLIENTS ; i++)
+	{
+		if(clients[i].idClient == idClient)
+		{
+			clientExists = idClient;
+		}
+	}
+	return clientExists;
 }
 
-void CHANNEL_LeaveClient(int idClient, int channel);
+// Return the idChannel
+int CHANNEL_JoinClient(int idClient, char* idChannel_s)
+{
+	int i;
+	int idChannel_i = -1;
+	int idNullChannel = -1;
+
+
+	for(i=0 ; i<MAX_CHANNELS ; i++)
+	{
+		if(strcmp(idChannel_s, channels[i].name) == 0)
+		{
+			idChannel_i = i;
+		}
+		if(channels[i].idChannel == -1)
+		{
+			idNullChannel = i;
+		}
+	}
+
+	if(idChannel_i == -1 && nbActiveChannels<MAX_CHANNELS && idNullChannel != -1)
+	{
+		idChannel_i = idNullChannel;
+	}
+
+	if(idChannel_i == -1 || getIdClient(idClient) == -1)
+	{
+		idChannel_i = -1;
+		printf("Client id %d cannot be joined to %s channel.", idClient, idChannel_s);
+	}else{
+		for(i=0 ; i<MAX_CLIENTS && idClient<MAX_CLIENTS ; i++)
+		{
+			if(channels[idChannel_i].clients[i] == -1)
+			{
+				channels[idChannel_i].clients[i] = idClient;
+			}
+		}
+	}
+	return idChannel_i;
+}
+
+void CHANNEL_LeaveClient(int idClient, int idChannel)
+{
+	int i;
+
+	for(i=0 ; i<MAX_CLIENTS && idClient<MAX_CLIENTS && idChannel<MAX_CHANNELS ; i++)
+	{
+		if(channels[idChannel].clients[i] == idClient)
+		{
+			channels[idChannel].clients[i] = -1;
+		}
+	}
+}
 
 // Return the idClient
 int acceptClient(char* clientName)
@@ -81,7 +146,7 @@ int acceptClient(char* clientName)
 	}else{
 		for(i=0 ; i<MAX_CLIENTS ; i++)
 		{
-			if(clients[i].idClient!= -1 && strcmp(clientName, clients[i]) == 0)
+			if(clients[i].idClient!= -1 && strcmp(clientName, clients[i].name) == 0)
 			{
 				uniqueName = 0;
 				break;
@@ -129,6 +194,11 @@ void disconnectClient(int clientNB)
 
 int transmit(int client, char* message);
 
+int analyzeMsg()
+{
+	return 0;
+}
+
 void analyzeFrame(char* frame)
 {
 	/*
@@ -136,24 +206,28 @@ void analyzeFrame(char* frame)
 	 */
 	char** extractedFrame;
 	extractedFrame = (char**)malloc(5*sizeof(char*));
+	int totalExtracted=0;
 	char delimiter = 0x01;
 	int idx=0;
 	int i=0;
 	char sum=0;
-	extractedFrame[idx]=strtok(frame, &delimiter); // Transformer le 0x00 en string.
+	extractedFrame[idx]=strtok(frame, &delimiter); // transform 0x01 to string.
 	for(idx=0 ; idx<4 ; idx++)
 	{
 		extractedFrame[idx+1] = strtok(NULL, &delimiter);
 		if(extractedFrame[idx]==NULL) break;
+		//if(extractedFrame[idx])
 
 	}
 	printf("TotalExtracted: %d\n", idx);
+	totalExtracted=idx;
 
 	/*
 	 * Check the correctness of the frame (from its Checksum)
 	 */
-	for(i=0 ; i<5 && extractedFrame[i]!=NULL ; i++)
+	for(i=0 ; i<idx ; i++)
 	{
+
 		printf("i=%d, rcvd: %s\n", i, extractedFrame[i]);
 	}
 
@@ -162,27 +236,27 @@ void analyzeFrame(char* frame)
 	 * This is to identify which kind of frame it is.
 	 */
 	int strSize = sizeof(extractedFrame[0])/sizeof(char);
-	if(strncmp(extractedFrame[0], "CONNECT", strSize) == 0)
+	if(strncmp(extractedFrame[0], "CONNECT", strSize) == 0 && totalExtracted == 4)
 	{
 		acceptClient(extractedFrame[1]);
 	}
-	else if(strncmp(extractedFrame[0], "JOIN", strSize) == 0)
+	else if(strncmp(extractedFrame[0], "JOIN", strSize) == 0 && totalExtracted == 4)
 	{
 
 	}
-	else if(strncmp(extractedFrame[0], "SAY", strSize) == 0)
+	else if(strncmp(extractedFrame[0], "SAY", strSize) == 0 && totalExtracted == 4)
 	{
 
 	}
-	else if(strncmp(extractedFrame[0], "LEAVE", strSize) == 0)
+	else if(strncmp(extractedFrame[0], "LEAVE", strSize) == 0 && totalExtracted == 4)
 	{
 
 	}
-	else if(strncmp(extractedFrame[0], "DISCONNECT", strSize) == 0)
+	else if(strncmp(extractedFrame[0], "DISCONNECT", strSize) == 0 && totalExtracted == 4)
 	{
 
 	}
-	else if(strncmp(extractedFrame[0], "ACK", strSize) == 0)
+	else if(strncmp(extractedFrame[0], "ACK", strSize) == 0 && totalExtracted == 4)
 	{
 
 	}
