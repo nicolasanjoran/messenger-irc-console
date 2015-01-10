@@ -207,6 +207,8 @@ void analyzeFrame(char* frame)
 	char** extractedFrame;
 	extractedFrame = (char**)malloc(5*sizeof(char*));
 	int totalExtracted=0;
+	int result = 0;
+	int rcvdIdFrame = -1;
 	char delimiter = 0x01;
 	int idx=0;
 	int i=0;
@@ -227,10 +229,18 @@ void analyzeFrame(char* frame)
 	 */
 	for(i=0 ; i<idx ; i++)
 	{
-
 		printf("i=%d, rcvd: %s\n", i, extractedFrame[i]);
 	}
 
+	//TODO Compute and compare checksum.
+
+	/*
+	 * Extract idFrame
+	 */
+	if(totalExtracted > 3)
+	{
+		rcvdIdFrame = atoi(extractedFrame[totalExtracted-2]);
+	}
 
 	/*
 	 * This is to identify which kind of frame it is.
@@ -238,7 +248,7 @@ void analyzeFrame(char* frame)
 	int strSize = sizeof(extractedFrame[0])/sizeof(char);
 	if(strncmp(extractedFrame[0], "CONNECT", strSize) == 0 && totalExtracted == 4)
 	{
-		acceptClient(extractedFrame[1]);
+		result = acceptClient(extractedFrame[1]);
 	}
 	else if(strncmp(extractedFrame[0], "JOIN", strSize) == 0 && totalExtracted == 4)
 	{
@@ -259,9 +269,9 @@ void analyzeFrame(char* frame)
 	else if(strncmp(extractedFrame[0], "ACK", strSize) == 0 && totalExtracted == 4)
 	{
 
+	}else{
+		printf("Incoming frame does not correspond to expected scheme : ACK will not be granted.\n");
 	}
-
-
 }
 
 int printStatus();
