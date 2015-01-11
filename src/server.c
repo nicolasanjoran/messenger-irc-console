@@ -24,6 +24,8 @@
 #define CMD_DISCONNECT 5
 #define CMD_ACK 6
 
+#define TRANSMIT_ALL -123
+
 //==========================================================================//
 
 
@@ -281,6 +283,25 @@ int disconnectClient(int clientNB)
 	return 0;
 }
 
+void transmit(int idClient, int idChannel, char* message)
+{
+	char finalMsg[MAX_MSG];
+	sprintf(finalMsg, "TRANSMIT%c%d%c%s", 0x01, idChannel, 0x01, message);
+
+	if(idClient == TRANSMIT_ALL)
+	{
+		for (int i = 0; i < MAX_CLIENTS; i++)
+		{
+			if(channels[idChannel].clients[i] != -1 && clients[i].idClient != -1)
+			{
+				send2Client(finalMsg, clients[i].client_addr);
+			}
+		}
+	}else{
+		send2Client(finalMsg, clients[idClient].client_addr);
+	}
+}
+
 int manageMsg(int idClient, int idChannel, char* msg)
 {
 	int result = -1;
@@ -291,7 +312,8 @@ int manageMsg(int idClient, int idChannel, char* msg)
 	if(CHANNEL_getID(idChannel)>=0 && getIdClient(idClient)>=0)
 	{
 		sprintf(finalMsg, "<<%s> -- %s>", clients[idClient].name, time2string());
-		
+		sprintf(finalMsg, "%s %s\n", finalMsg, msg);
+		/*
 		for (j = 0; j*100+i < msgLen ; j++)
 		{
 			sprintf(finalMsg, "%s\n> ", finalMsg);
@@ -301,14 +323,14 @@ int manageMsg(int idClient, int idChannel, char* msg)
 			}
 		}
 		sprintf(finalMsg, "%s\n ", finalMsg);
+		//*/
 		write(channels[idChannel].file, finalMsg, strlen(finalMsg));
+		transmit(TRANSMIT_ALL, idChannel,finalMsg);
 		result=0;
 		
 	}
 	return result;
 }
-
-void transmit(int client, char* message);
 
 void ack_frame(int idFrame, int idClient, int cmd_i, char* cmd_s, struct sockaddr_in sockaddr_client,int result)
 {
