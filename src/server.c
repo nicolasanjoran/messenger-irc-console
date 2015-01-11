@@ -25,6 +25,9 @@
 #define CMD_ACK 6
 
 #define TRANSMIT_ALL -123
+#define MSG_CLIENTS 0
+#define MSG_TEXT 1
+#define MSG_HIST 2
 
 //==========================================================================//
 
@@ -283,22 +286,36 @@ int disconnectClient(int clientNB)
 	return 0;
 }
 
-void transmit(int idClient, int idChannel, char* message)
+void transmit(int idClient, int msg_type, int idChannel, char* message)
 {
 	char finalMsg[MAX_MSG];
-	sprintf(finalMsg, "TRANSMIT%c%d%c%s", 0x01, idChannel, 0x01, message);
 
-	if(idClient == TRANSMIT_ALL)
+	if(msg_type == MSG_TEXT)
 	{
-		for (int i = 0; i < MAX_CLIENTS; i++)
-		{
-			if(channels[idChannel].clients[i] != -1 && clients[i].idClient != -1)
-			{
-				send2Client(finalMsg, clients[i].client_addr);
-			}
-		}
+		sprintf(finalMsg, "TRANSMIT%c%d%cMSG%c%s", 0x01, idChannel,0x01, 0x01, message);
+	}else if(msg_type == MSG_CLIENTS)
+	{
+
+	}else if(msg_type == MSG_HIST){
+
 	}else{
-		send2Client(finalMsg, clients[idClient].client_addr);
+		msg_type = -1;
+	}
+
+	if(msg_type != -1)
+	{
+		if(idClient == TRANSMIT_ALL)
+		{
+			for (int i = 0; i < MAX_CLIENTS; i++)
+			{
+				if(channels[idChannel].clients[i] != -1 && clients[i].idClient != -1)
+				{
+					send2Client(finalMsg, clients[i].client_addr);
+				}
+			}
+		}else{
+			send2Client(finalMsg, clients[idClient].client_addr);
+		}
 	}
 }
 
@@ -325,7 +342,7 @@ int manageMsg(int idClient, int idChannel, char* msg)
 		sprintf(finalMsg, "%s\n ", finalMsg);
 		//*/
 		write(channels[idChannel].file, finalMsg, strlen(finalMsg));
-		transmit(TRANSMIT_ALL, idChannel,finalMsg);
+		transmit(TRANSMIT_ALL, MSG_TEXT,idChannel,finalMsg);
 		result=0;
 		
 	}
