@@ -5,7 +5,10 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-
+#include <fcntl.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <time.h>
 
 //========================== DEFINES =======================================//
 #define SERVER_PORT 1500
@@ -31,6 +34,7 @@ struct channel {
   char* name;
   int nbClients;
   int clients[MAX_CLIENTS];
+  int file;
 };
 
 struct client{
@@ -47,6 +51,9 @@ int sd;
 int nbConnectedClients;
 int nbActiveChannels;
 unsigned int frameCounter;
+
+time_t timestamp; 
+struct tm * t; 
 //==========================================================================//
 
 
@@ -57,7 +64,7 @@ void init()
 	int i;
 	nbConnectedClients = 0;
 	nbActiveChannels = 0;
-	frameCounter = 0;
+	frameCounter = 1;
 
 	for(i=0 ; i<MAX_CLIENTS ; i++)
 	{
@@ -71,7 +78,20 @@ void init()
 		channels[i].name = "";
 		channels[i].nbClients = 0;
 	}
+
+	mkdir("channels", S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
 }
+
+char* time2string()
+{
+	char* stringTime = malloc(20);
+	timestamp = time(NULL); 
+    t = localtime(&timestamp); 
+    sprintf(stringTime, "%02d-%02d-%04d %02d:%02d:%02d", t->tm_mday, t->tm_mon+1, t->tm_year+1900, t->tm_hour, t->tm_min, t->tm_sec);
+
+    return stringTime;
+}
+
 unsigned char getChecksum(char*s, int stringSize)
 {
 	unsigned char sum = 0;
@@ -114,12 +134,29 @@ int getIdClient(int idClient)
 	return clientExists;
 }
 
+int CHANNEL_getID(int idChannel)
+{
+	int i;
+	int channelExists = -1;
+	for(i=0 ; i<MAX_CHANNELS ; i++)
+	{
+		if(channels[i].idChannel == idChannel)
+		{
+			channelExists = idChannel;
+			break;
+		}
+	}
+	return channelExists;
+}
+
 // Return the idChannel
-int CHANNEL_JoinClient(int idClient, char* idChannel_s)
+int CHANNEL_JoinClient(int idClient, char* idChannel_s_ptr)
 {
 	int i;
 	int idChannel_i = -1;
 	int idNullChannel = -1;
+	char*idChannel_s = malloc(strlen(idChannel_s_ptr)+1);
+	strcpy(idChannel_s, idChannel_s_ptr);
 
 
 	for(i=0 ; i<MAX_CHANNELS ; i++)
@@ -128,7 +165,7 @@ int CHANNEL_JoinClient(int idClient, char* idChannel_s)
 		{
 			idChannel_i = i;
 		}
-		if(channels[i].idChannel == -1)
+		if(channels[i].idChannel == -1 && idNullChannel == -1)
 		{
 			idNullChannel = i;
 		}
@@ -136,13 +173,20 @@ int CHANNEL_JoinClient(int idClient, char* idChannel_s)
 
 	if(idChannel_i == -1 && nbActiveChannels<MAX_CHANNELS && idNullChannel != -1)
 	{
+		char * filename = malloc(strlen(idChannel_s)+15);
+		
 		idChannel_i = idNullChannel;
+		printf("%s: Channel %s does not exist, it will be created ==> id=%d.\n",time2string(), idChannel_s, idNullChannel);
+		sprintf(filename,"channels/%s.hist",idChannel_s);
+		channels[idNullChannel].idChannel = idChannel_i;
+		channels[idNullChannel].name = idChannel_s;
+		channels[idNullChannel].file = open(filename, O_CREAT | O_RDWR, 0666);
 	}
 
 	if(idChannel_i == -1 || getIdClient(idClient) == -1)
 	{
 		idChannel_i = -1;
-		printf("Client id %d cannot be joined to %s channel.", idClient, idChannel_s);
+		printf("%s: Client id %d cannot be joined to %s channel.", time2string(), idClient, idChannel_s);
 	}else{
 		for(i=0 ; i<MAX_CLIENTS && idClient<MAX_CLIENTS ; i++)
 		{
@@ -180,7 +224,7 @@ int acceptClient(char* clientNamePtr, struct sockaddr_in sockaddr_client)
 	strcpy(clientName, clientNamePtr);
 	if(nbConnectedClients == MAX_CLIENTS)
 	{
-		printf("New client cannot be accepted, MAX_CLIENTS number has already been reached.\n");
+		printf("%s: New client cannot be accepted, MAX_CLIENTS number has already been reached.\n", time2string());
 		result = -1;
 	}else{
 		printf("%s %s STRCMP=%d\n",clientName,clients[i].name,strcmp(clientName, clients[i].name));
@@ -203,12 +247,12 @@ int acceptClient(char* clientNamePtr, struct sockaddr_in sockaddr_client)
 			clients[id].idClient = id;
 			clients[id].name = clientName;
 			clients[id].client_addr = sockaddr_client;
-			printf("Client %s just connected => idClient: %d.\n", clientName, id);
+			printf("%s: Client %s just connected => idClient: %d.\n",time2string(), clientName, id);
 			result = id;
 		}
 		else if(id==-1 && uniqueName == 0)
 		{
-			printf("New client cannot be accepted, specified name already exists.\n");
+			printf("%s: New client cannot be accepted, specified name already exists.\n", time2string());
 			result=-2;
 		}else{
 			printf("Error.. id=%d, uniqueName=%d\n", id, uniqueName);
@@ -225,7 +269,7 @@ int disconnectClient(int clientNB)
 
 	if(clientNB < MAX_CLIENTS && clients[clientNB].idClient != -1)
 	{
-		printf("Client %s disconnected.\n", clients[clientNB].name);
+		printf("%s: Client %s disconnected.\n", time2string(), clients[clientNB].name);
 		clients[clientNB].idClient = -1;
 		clients[clientNB].name = NULL;
 	}
@@ -235,6 +279,33 @@ int disconnectClient(int clientNB)
 		CHANNEL_LeaveClient(clientNB, i);
 	}
 	return 0;
+}
+
+int manageMsg(int idClient, int idChannel, char* msg)
+{
+	int result = -1;
+	int i=0,j=0;
+	char finalMsg[MAX_MSG];
+	int msgLen = strlen(msg);
+	printf("msgLen=%d\n", msgLen);
+	if(CHANNEL_getID(idChannel)>=0 && getIdClient(idClient)>=0)
+	{
+		sprintf(finalMsg, "<<%s> -- %s>", clients[idClient].name, time2string());
+		
+		for (j = 0; j*100+i < msgLen ; j++)
+		{
+			sprintf(finalMsg, "%s\n> ", finalMsg);
+			for (i = 0; i < 100 && j*100+i < msgLen ; i++)
+			{
+				sprintf(finalMsg,"%s%c", finalMsg, msg[j*100+i]);
+			}
+		}
+		sprintf(finalMsg, "%s\n ", finalMsg);
+		write(channels[idChannel].file, finalMsg, strlen(finalMsg));
+		result=0;
+		
+	}
+	return result;
 }
 
 void transmit(int client, char* message);
@@ -260,15 +331,17 @@ void ack_frame(int idFrame, int idClient, int cmd_i, char* cmd_s, struct sockadd
 
 }
 
-void analyzeFrame(char* frame, struct sockaddr_in addr_client_frame)
+void analyzeFrame(char* rcvdFrame, struct sockaddr_in addr_client_frame)
 {
 	/*
 	 * This is used for extracting fields from the received frame.
 	 */
 	char** extractedFrame;
-	char*rcvdFrame = malloc(strlen(frame)+1);
-	strcpy(rcvdFrame, frame);
-	extractedFrame = (char**)malloc(5*sizeof(char*));
+	int cnt = 0;
+	//char*rcvdFrame = malloc(strlen_int(frame));
+	//memcpy(rcvdFrame, frame, strlen_int(frame));
+	//rcvdFrame = frame;
+	extractedFrame = (char**)malloc(6*sizeof(char*));
 	int totalExtracted=0;
 	int result = 0;
 	char cmd = -1;
@@ -278,15 +351,16 @@ void analyzeFrame(char* frame, struct sockaddr_in addr_client_frame)
 	int idx=0;
 	int i=0;
 	char sum=0;
-	extractedFrame[idx]=strtok(frame, &delimiter); // transform 0x01 to string.
-	for(idx=0 ; idx<4 ; idx++)
+	//printf("analyzeFrame(%s)\n", rcvdFrame);
+	extractedFrame[idx]=strtok(rcvdFrame, &delimiter); // transform 0x01 to string.
+	for(idx=0 ; idx<6 ; idx++)
 	{
 		extractedFrame[idx+1] = strtok(NULL, &delimiter);
+		printf("idx=%d, rcvd: %s\n", idx, extractedFrame[idx]);
 		if(extractedFrame[idx]==NULL) break;
-		//if(extractedFrame[idx])
 
 	}
-	//printf("TotalExtracted: %d\n", idx);
+	printf("TotalExtracted: %d\n", idx);
 	totalExtracted=idx;
 
 	/*
@@ -306,7 +380,8 @@ void analyzeFrame(char* frame, struct sockaddr_in addr_client_frame)
 		 * Checksum processing
 		 */
 		printf("Processed checksum: %x    ::  Actual:%x\n",getChecksum(rcvdFrame, strlen(rcvdFrame)-1), (unsigned char)extractedFrame[totalExtracted-1][0]);
-		if((unsigned char)extractedFrame[totalExtracted-1][0] != getChecksum(rcvdFrame, strlen(rcvdFrame)-1))
+		//TODO Uncomment checksum checkers !!!
+		if(0)//(unsigned char)extractedFrame[totalExtracted-1][0] != getChecksum(rcvdFrame, strlen(rcvdFrame)-1))
 		{
 			totalExtracted = 0;
 		}else
@@ -331,9 +406,9 @@ void analyzeFrame(char* frame, struct sockaddr_in addr_client_frame)
 		result = CHANNEL_JoinClient(atoi(extractedFrame[1]), extractedFrame[2]);
 		cmd = CMD_JOIN;
 	}
-	else if(totalExtracted == 4 && strncmp(extractedFrame[0], "SAY", strSize) == 0)
+	else if(totalExtracted == 6 && strncmp(extractedFrame[0], "SAY", strSize) == 0)
 	{
-		//TODO Say
+		manageMsg(atoi(extractedFrame[1]), atoi(extractedFrame[2]), extractedFrame[3]);
 		cmd = CMD_SAY;
 	}
 	else if(totalExtracted == 4 && strncmp(extractedFrame[0], "LEAVE", strSize) == 0)
@@ -352,7 +427,7 @@ void analyzeFrame(char* frame, struct sockaddr_in addr_client_frame)
 		cmd = CMD_ACK;
 	}else{
 		result = -1;
-		printf("Incoming frame does not correspond to expected scheme : ACK will not be granted.\n");
+		printf("%s: Incoming frame does not correspond to expected scheme : ACK will not be granted.\n", time2string());
 	}
 
 	//TODO Produce response (ACK).
@@ -391,6 +466,7 @@ int main(void)
     return 1;
   }
 
+  printf("%s: Server launched. Waiting for clients.\n", time2string());
   // Callback
   for (;;)
   {
@@ -399,7 +475,7 @@ int main(void)
     if (n == -1)
       perror("recvfrom");
     else {
-    	printf("received from %s: %s\n", inet_ntoa(client_addr.sin_addr), msgbuf);
+    	printf("%s: received from %s: %s\n", time2string(), inet_ntoa(client_addr.sin_addr), msgbuf);
     	analyzeFrame(msgbuf, client_addr);
 
       //sendto(sd, "OK", sizeof("OK"), 0, (struct sockaddr *)&client_addr, addr_len);
