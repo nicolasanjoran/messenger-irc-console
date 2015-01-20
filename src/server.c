@@ -9,6 +9,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <time.h>
+#include <pthread.h>
 
 //========================== DEFINES =======================================//
 #define SERVER_PORT 1500
@@ -29,9 +30,13 @@
 #define MSG_TEXT 1
 #define MSG_HIST 2
 
+#define FRAME_HIST_LEN 500
+
 //==========================================================================//
 
-
+/*
+ * TODO: Commands history, for re-sending them if not acked.
+ */
 
 //=========================== GLOBAL VARs & Types ==========================//
 struct channel {
@@ -46,16 +51,25 @@ struct client{
   int idClient; // -1 means not specified.
   char* name;
   struct sockaddr_in client_addr;
+  char isAlive;
+};
+
+struct frameStruct{
+	char* msg;
+	char clientAcked[MAX_CLIENTS]; // 0: Client is not concerned or already acked
+								   // 1: Client has not acked yet
 };
 
 struct client clients[MAX_CLIENTS];
 struct channel channels[MAX_CHANNELS];
+struct frameStruct framesHist[FRAME_HIST_LEN];
 struct sockaddr_in client_addr, server_addr;
 socklen_t addr_len;
 int sd;
 int nbConnectedClients;
 int nbActiveChannels;
 unsigned int frameCounter;
+pthread_t threadTimeOut;
 
 time_t timestamp; 
 struct tm * t; 
@@ -66,7 +80,7 @@ struct tm * t;
 
 void init()
 {
-	int i;
+	int i,j;
 	nbConnectedClients = 0;
 	nbActiveChannels = 0;
 	frameCounter = 1;
@@ -75,6 +89,7 @@ void init()
 	{
 		clients[i].idClient = -1;
 		clients[i].name = "";
+		clients[i].isAlive = '0';
 	}
 
 	for(i=0 ; i<MAX_CHANNELS ; i++)
@@ -84,7 +99,21 @@ void init()
 		channels[i].nbClients = 0;
 	}
 
+	for(i=0 ; i<FRAME_HIST_LEN ; i++)
+	{
+		for (j = 0; j < MAX_CLIENTS; j++)
+		{
+			framesHist[i].clientAcked[j] = 0;
+		}
+	}
+
 	mkdir("channels", S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
+}
+
+int incFrameCounter()
+{
+	frameCounter = (frameCounter + 1) %FRAME_HIST_LEN;
+	return frameCounter;
 }
 
 char* time2string()
@@ -113,14 +142,20 @@ unsigned char getChecksum(char*s, int stringSize)
 	return sum;
 }
 
-void send2Client(char* msg, struct sockaddr_in sockaddr_client)
+
+
+void send2Client(char* msg, int idClient, struct sockaddr_in sockaddr_client)
 {
 	unsigned char chkSum = getChecksum(msg, strlen(msg));
 
 	char finalMsg[MAX_MSG];
 
-	sprintf(finalMsg,"%s%c%u%c%c", msg, 0x01, frameCounter++, 0x01, chkSum);
-
+	sprintf(finalMsg,"%s%c%u%c%c", msg, 0x01, incFrameCounter(), 0x01, chkSum);
+	if(idClient != -1)
+	{
+		framesHist[frameCounter].msg = finalMsg;
+		framesHist[frameCounter].clientAcked[idClient] = 0;
+	}
 	sendto(sd, finalMsg, strlen(finalMsg), 0, (struct sockaddr *)&sockaddr_client, addr_len);
 }
 
@@ -138,6 +173,7 @@ int getIdClient(int idClient)
 	}
 	return clientExists;
 }
+
 
 int CHANNEL_getID(int idChannel)
 {
@@ -163,43 +199,49 @@ int CHANNEL_JoinClient(int idClient, char* idChannel_s_ptr)
 	char*idChannel_s = malloc(strlen(idChannel_s_ptr)+1);
 	strcpy(idChannel_s, idChannel_s_ptr);
 
-
-	for(i=0 ; i<MAX_CHANNELS ; i++)
+	if(getIdClient(idClient) != -1)
 	{
-		if(strcmp(idChannel_s, channels[i].name) == 0)
+		for(i=0 ; i<MAX_CHANNELS ; i++)
 		{
-			idChannel_i = i;
-		}
-		if(channels[i].idChannel == -1 && idNullChannel == -1)
-		{
-			idNullChannel = i;
-		}
-	}
-
-	if(idChannel_i == -1 && nbActiveChannels<MAX_CHANNELS && idNullChannel != -1)
-	{
-		char * filename = malloc(strlen(idChannel_s)+15);
-		
-		idChannel_i = idNullChannel;
-		printf("%s: Channel %s does not exist, it will be created ==> id=%d.\n",time2string(), idChannel_s, idNullChannel);
-		sprintf(filename,"channels/%s.hist",idChannel_s);
-		channels[idNullChannel].idChannel = idChannel_i;
-		channels[idNullChannel].name = idChannel_s;
-		channels[idNullChannel].file = open(filename, O_CREAT | O_RDWR, 0666);
-	}
-
-	if(idChannel_i == -1 || getIdClient(idClient) == -1)
-	{
-		idChannel_i = -1;
-		printf("%s: Client id %d cannot be joined to %s channel.", time2string(), idClient, idChannel_s);
-	}else{
-		for(i=0 ; i<MAX_CLIENTS && idClient<MAX_CLIENTS ; i++)
-		{
-			if(channels[idChannel_i].clients[i] == -1)
+			if(strcmp(idChannel_s, channels[i].name) == 0)
 			{
-				channels[idChannel_i].clients[i] = idClient;
+				idChannel_i = i;
+			}
+			if(channels[i].idChannel == -1 && idNullChannel == -1)
+			{
+				idNullChannel = i;
 			}
 		}
+
+		if(idChannel_i == -1 && nbActiveChannels<MAX_CHANNELS && idNullChannel != -1)
+		{
+			char * filename = malloc(strlen(idChannel_s)+15);
+
+			idChannel_i = idNullChannel;
+			printf("%s: Channel %s does not exist, it will be created ==> id=%d.\n",time2string(), idChannel_s, idNullChannel);
+			sprintf(filename,"channels/%s.hist",idChannel_s);
+			channels[idNullChannel].idChannel = idChannel_i;
+			channels[idNullChannel].name = idChannel_s;
+			channels[idNullChannel].file = open(filename, O_CREAT | O_RDWR, 0666);
+		}
+
+		if(idChannel_i == -1 || getIdClient(idClient) == -1)
+		{
+			idChannel_i = -1;
+			printf("%s: Client id %d cannot be joined to %s channel.", time2string(), idClient, idChannel_s);
+		}else{
+			for(i=0 ; i<MAX_CLIENTS && idClient<MAX_CLIENTS ; i++)
+			{
+				if(channels[idChannel_i].clients[i] == -1)
+				{
+					channels[idChannel_i].clients[i] = idClient;
+				}
+			}
+		}
+	}
+	else
+	{
+		printf("Client does not exist. Cannot join channel.\n");
 	}
 	return idChannel_i;
 }
@@ -276,7 +318,7 @@ int disconnectClient(int clientNB)
 	{
 		printf("%s: Client %s disconnected.\n", time2string(), clients[clientNB].name);
 		clients[clientNB].idClient = -1;
-		clients[clientNB].name = NULL;
+		clients[clientNB].name = "";
 	}
 
 	for(i=0 ; i<MAX_CHANNELS ; i++)
@@ -285,6 +327,39 @@ int disconnectClient(int clientNB)
 	}
 	return 0;
 }
+
+void * threadTimeOutChecker(void* arg)
+{
+	int i=0;
+	while(1)
+	{
+		sleep(10);
+
+		for(i=0 ; i<MAX_CLIENTS ; i++)
+		{
+			if(getIdClient(i) >= 0)
+			{
+				clients[i].isAlive = '0';
+				char aliveMsg[6];
+				sprintf(aliveMsg, "ALIVE");
+				send2Client(aliveMsg, i, clients[i].client_addr);
+			}
+		}
+		sleep(2);
+
+		for(i=0 ; i<MAX_CLIENTS ; i++)
+		{
+			if(getIdClient(i) >= 0 && clients[i].isAlive=='0')
+			{
+				// TIMEOUT !!
+				disconnectClient(i);
+			}
+		}
+	}
+
+	return NULL;
+}
+
 
 void transmit(int idClient, int msg_type, int idChannel, char* message)
 {
@@ -310,11 +385,11 @@ void transmit(int idClient, int msg_type, int idChannel, char* message)
 			{
 				if(channels[idChannel].clients[i] != -1 && clients[i].idClient != -1)
 				{
-					send2Client(finalMsg, clients[i].client_addr);
+					send2Client(finalMsg, i, clients[i].client_addr);
 				}
 			}
 		}else{
-			send2Client(finalMsg, clients[idClient].client_addr);
+			send2Client(finalMsg, idClient, clients[idClient].client_addr);
 		}
 	}
 }
@@ -366,8 +441,16 @@ void ack_frame(int idFrame, int idClient, int cmd_i, char* cmd_s, struct sockadd
 
 	sprintf(rsp, "ACK%c%s%c%s", (char)0x01, cmd_s, (char)0x01, rsp_value);
 
-	send2Client(rsp, sockaddr_client);
+	send2Client(rsp, -1,sockaddr_client);
 
+}
+
+void analyzeAck(int idClient)
+{
+	if(getIdClient(idClient) >= 0)
+	{
+		clients[idClient].isAlive = '1';
+	}
 }
 
 void analyzeFrame(char* rcvdFrame, struct sockaddr_in addr_client_frame)
@@ -462,14 +545,13 @@ void analyzeFrame(char* rcvdFrame, struct sockaddr_in addr_client_frame)
 	}
 	else if(totalExtracted == 4 && strncmp(extractedFrame[0], "ACK", strSize) == 0)
 	{
-		//TODO ACK system.
+		analyzeAck(atoi(extractedFrame[1]));
 		cmd = CMD_ACK;
 	}else{
 		result = -1;
 		printf("%s: Incoming frame does not correspond to expected scheme : ACK will not be granted.\n", time2string());
 	}
 
-	//TODO Produce response (ACK).
 	if(cmd != CMD_ACK)
 	{
 		ack_frame(rcvdIdFrame, idClient, cmd, extractedFrame[0], addr_client_frame, result);
@@ -506,6 +588,9 @@ int main(void)
   }
 
   printf("%s: Server launched. Waiting for clients.\n", time2string());
+
+  pthread_create(&threadTimeOut, NULL, threadTimeOutChecker, NULL);
+
   // Callback
   for (;;)
   {
