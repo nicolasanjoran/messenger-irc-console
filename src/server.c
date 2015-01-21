@@ -72,6 +72,7 @@ int nbConnectedClients;
 int nbActiveChannels;
 unsigned int frameCounter;
 pthread_t threadTimeOut;
+pthread_t threadAckThr;
 
 time_t timestamp; 
 struct tm * t; 
@@ -157,7 +158,7 @@ void send2Client(char* msg, int idClient, struct sockaddr_in sockaddr_client)
 	if(idClient != -1)
 	{
 		framesHist[frameCounter].msg = finalMsg;
-		framesHist[frameCounter].clientAcked[idClient] = 0;
+		framesHist[frameCounter].clientAcked[idClient] = 1;
 	}
 	sendto(sd, finalMsg, strlen(finalMsg), 0, (struct sockaddr *)&sockaddr_client, addr_len);
 }
@@ -416,7 +417,8 @@ void transmit(int idClient, int msg_type, int idChannel, char* message)
 	{
 		if(idClient == TRANSMIT_ALL)
 		{
-			for (int i = 0; i < MAX_CLIENTS; i++)
+			int i;
+			for (i = 0; i < MAX_CLIENTS; i++)
 			{
 				if(channels[idChannel].clients[i] != -1 && clients[i].idClient != -1)
 				{
@@ -629,6 +631,7 @@ int main(void)
   printf("%s: Server launched. Waiting for clients.\n", time2string());
 
   pthread_create(&threadTimeOut, NULL, threadTimeOutChecker, NULL);
+  pthread_create(&threadAckThr, NULL, threadAckSystem, NULL);
 
   // Callback
   for (;;)
