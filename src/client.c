@@ -9,6 +9,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <time.h>
+#include <pthread.h>
 
 //========================== DEFINES =======================================//
 #define SERVER_PORT 1500
@@ -73,6 +74,8 @@ int analyzeFrame(char* rcvdFrame);
 void transmit(int idChannel, char* message);
 
 void ack_frame(int idFrame, int cmd_i, char* cmd_s, int result);
+
+void * threadReceiver(void * arg);
 //==========================================================================//
 
 
@@ -94,6 +97,8 @@ int main (int argc, char *argv[])
 	while(SERVER_Connect() < 0)
 	{
 	}
+
+	pthread_create(pthreadReceiver,NULL,threadReceiver,NULL);
 
 	//callback
 	while(1)
