@@ -21,6 +21,7 @@
 #define CMD_JOIN 2
 #define CMD_ACK 3
 #define CMD_TRANSMIT 4
+#define CMD_ALIVE 5
 
 #define FRAME_HIST_LEN 500
 //==========================================================================//
@@ -36,6 +37,7 @@ struct channel {
 struct frameStruct{
 	char active;
 	char* msg;
+	int resp;
 	char serverAcked; // 0: Client is not concerned or already acked
 	// 1: Client has not acked yet, wait 1s more.
 	// 2: Server has waited for 1s, re-try to send frame.
@@ -88,6 +90,7 @@ int main (int argc, char *argv[])
 	int i;
 	char msgbuf[MAX_MSG];
 	frameCounter = 0;
+	idClient = -1;
 	//
 	printf("Choisissez un pseudo : \n");
 	fgets(nickname,50,stdin);
@@ -164,7 +167,7 @@ void * threadAckSystem(void * arg)
 
 			if(framesHist[i].serverAcked == 0)
 			{
-				free(framesHist[i].msg);
+				//free(framesHist[i].msg);
 			}
 
 		}
@@ -172,11 +175,12 @@ void * threadAckSystem(void * arg)
 	}
 }
 
-void analyzeAck( int idFrame)
+void analyzeAck( int idFrame, int resp)
 {
 	if(idFrame >= 0 && idFrame < FRAME_HIST_LEN)
 	{
 		printf("ACK reçu.\n");
+		framesHist[idFrame].resp = resp;
 		framesHist[idFrame].serverAcked = 0;
 	}
 }
@@ -232,7 +236,8 @@ int  SERVER_Connect(){
 	
 	printf("Trying to connect...\n");
 	while(framesHist[result].serverAcked != 0);
-	printf("Connected.\n");
+	idClient = framesHist[result].resp;
+	printf("Connected as userID: %d\n", idClient);
 
 
 	return result;
@@ -286,7 +291,7 @@ void CHANNEL_Leave(int idChannel){
 
 int send2Server(char* msg)
 {
-	int result,n,numTrame;
+	int result,n,numTrame,i;
 	char finalMsg[MAX_MSG];
 	char msgbuf[MAX_MSG];
 
@@ -299,6 +304,13 @@ int send2Server(char* msg)
 
 	framesHist[frameCounter].msg = finalMsg;
 	framesHist[frameCounter].serverAcked = 1;
+
+	printf("SEND=> %s\n", finalMsg);
+	for(i=0 ; i<strlen(finalMsg) ; i++)
+	{
+		printf("%02x ", finalMsg[i]);
+	}
+	printf("\n");
 
 	if (sendto(sd, finalMsg, strlen(finalMsg) + 1, 0, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) == -1)
 	{
@@ -369,7 +381,7 @@ int analyzeFrame(char* frame)
 	/*
 	 * Extract idFrame
 	 */
-	if(totalExtracted > 3)
+	if(totalExtracted >= 3)
 	{
 		/*
 		 * Checksum processing
@@ -404,6 +416,13 @@ int analyzeFrame(char* frame)
 	{
 		//TODO ACK system.
 		cmd = CMD_ACK;
+		analyzeAck(atoi(extractedFrame[1]), atoi(extractedFrame[2]));
+		result = atoi(extractedFrame[1]);
+	}
+	else if(totalExtracted == 3 && strncmp(extractedFrame[0], "ALIVE", strSize) == 0)
+	{
+		//TODO ACK system.
+		cmd = CMD_ALIVE;
 		result = atoi(extractedFrame[1]);
 	}
 	else
@@ -458,7 +477,7 @@ void ack_frame(int idFrame, int cmd_i, char* cmd_s, int result)
 		sprintf(rsp_value, "%d", result);
 	}
 
-	sprintf(rsp, "ACK%c%s%c%s%c", (char)0x01, cmd_s, (char)0x01, rsp_value, 0x01);
+	sprintf(rsp, "ACK%c%d%c%d%c%s%c", (char)0x01,idClient,0x01, idFrame, (char)0x01, rsp_value, 0x01);
 
 	send2Server(rsp);
 

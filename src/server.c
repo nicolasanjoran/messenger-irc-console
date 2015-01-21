@@ -151,17 +151,25 @@ unsigned char getChecksum(char*s, int stringSize)
 void send2Client(char* msg, int idClient, struct sockaddr_in sockaddr_client)
 {
 	char finalMsg[MAX_MSG];
-	
+	int i;
 	sprintf(finalMsg,"%s%c%u%c", msg,0x01, incFrameCounter(),0x01);
 	
 	unsigned char chkSum = getChecksum(msg, strlen(msg));
 
-	sprintf(finalMsg,"%s%c", msg, chkSum);
+	sprintf(finalMsg,"%s%c", finalMsg, chkSum);
 	if(idClient != -1)
 	{
 		framesHist[frameCounter].msg = finalMsg;
 		framesHist[frameCounter].clientAcked[idClient] = 1;
 	}
+
+	printf("SEND=> %s\n", finalMsg);
+	for(i=0 ; i<strlen(finalMsg) ; i++)
+	{
+		printf("%02x ", finalMsg[i]);
+	}
+	printf("\n");
+
 	sendto(sd, finalMsg, strlen(finalMsg), 0, (struct sockaddr *)&sockaddr_client, addr_len);
 }
 
@@ -347,7 +355,7 @@ void * threadTimeOutChecker(void* arg)
 			{
 				clients[i].isAlive = 0;
 				char aliveMsg[7];
-				sprintf(aliveMsg, "ALIVE%c", 0x1);
+				sprintf(aliveMsg, "ALIVE");
 				send2Client(aliveMsg, i, clients[i].client_addr);
 			}
 		}
@@ -467,6 +475,7 @@ void ack_frame(int idFrame, int idClient, int cmd_i, char* cmd_s, struct sockadd
 {
 	char rsp_value[15];
 	char rsp[MAX_MSG];
+	int i;
 	if(cmd_s == NULL || cmd_i==-1)
 	{
 		sprintf(cmd_s, "ERR");
@@ -478,8 +487,13 @@ void ack_frame(int idFrame, int idClient, int cmd_i, char* cmd_s, struct sockadd
 		sprintf(rsp_value, "%d", result);
 	}
 
-	sprintf(rsp, "ACK%c%s%c%s%c", 0x01, cmd_s, 0x01, rsp_value,0x01);
-
+	sprintf(rsp, "ACK%c%d%c%s", 0x01, idFrame, 0x01, rsp_value);
+	printf("ACK=> %s\n", rsp);
+	for(i=0 ; i<strlen(rsp) ; i++)
+	{
+		printf("%02x ", rsp[i]);
+	}
+	printf("\n");
 	send2Client(rsp, -1,sockaddr_client);
 
 }
@@ -590,7 +604,7 @@ void analyzeFrame(char* rcvdFrame, struct sockaddr_in addr_client_frame)
 		result = disconnectClient(atoi(extractedFrame[1]));
 		cmd = CMD_DISCONNECT;
 	}
-	else if(totalExtracted == 5 && strncmp(extractedFrame[0], "ACK", strSize) == 0)
+	else if(totalExtracted == 6 && strncmp(extractedFrame[0], "ACK", strSize) == 0)
 	{
 		analyzeAck(atoi(extractedFrame[1]), atoi(extractedFrame[2]));
 		cmd = CMD_ACK;
