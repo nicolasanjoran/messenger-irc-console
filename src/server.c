@@ -55,9 +55,11 @@ struct client{
 };
 
 struct frameStruct{
+	char active;
 	char* msg;
 	char clientAcked[MAX_CLIENTS]; // 0: Client is not concerned or already acked
-								   // 1: Client has not acked yet
+								   // 1: Client has not acked yet, wait 1s more.
+								   // 2: Server has waited for 1s, re-try to send frame.
 };
 
 struct client clients[MAX_CLIENTS];
@@ -101,6 +103,7 @@ void init()
 
 	for(i=0 ; i<FRAME_HIST_LEN ; i++)
 	{
+		framesHist[i].active = 0;
 		for (j = 0; j < MAX_CLIENTS; j++)
 		{
 			framesHist[i].clientAcked[j] = 0;
@@ -360,6 +363,38 @@ void * threadTimeOutChecker(void* arg)
 	return NULL;
 }
 
+void * threadAckSystem(void * arg)
+{
+	int i, j;
+	while(1)
+	{
+		sleep(1);
+		for(i=0 ; i<FRAME_HIST_LEN && framesHist[i].active == 1 ; i++)
+		{
+			int clientCounter = 0;
+			for(j=0 ; j<MAX_CLIENTS ; j++)
+			{
+				if(framesHist[i].clientAcked[j] == 1)
+				{
+					framesHist[i].clientAcked[j]++;
+					clientCounter++;
+				}
+				else if(framesHist[i].clientAcked[j] == 2)
+				{
+					framesHist[i].clientAcked[j] = 1;
+					sendto(sd, framesHist[i].msg, strlen(framesHist[i].msg), 0, (struct sockaddr *)&clients[j].client_addr, addr_len);
+					clientCounter++;
+				}
+			}
+			if(clientCounter == 0)
+			{
+				framesHist[i].active = 0;
+				free(framesHist[i].msg);
+			}
+		}
+	}
+	return NULL;
+}
 
 void transmit(int idClient, int msg_type, int idChannel, char* message)
 {
@@ -445,11 +480,15 @@ void ack_frame(int idFrame, int idClient, int cmd_i, char* cmd_s, struct sockadd
 
 }
 
-void analyzeAck(int idClient)
+void analyzeAck(int idClient, int idFrame)
 {
 	if(getIdClient(idClient) >= 0)
 	{
 		clients[idClient].isAlive = '1';
+	}
+	if(getIdClient(idClient) >= 0 && idFrame >= 0 && idFrame < FRAME_HIST_LEN)
+	{
+		framesHist[idFrame].clientAcked[idClient] = 0;
 	}
 }
 
@@ -545,7 +584,7 @@ void analyzeFrame(char* rcvdFrame, struct sockaddr_in addr_client_frame)
 	}
 	else if(totalExtracted == 4 && strncmp(extractedFrame[0], "ACK", strSize) == 0)
 	{
-		analyzeAck(atoi(extractedFrame[1]));
+		analyzeAck(atoi(extractedFrame[1]), atoi(extractedFrame[2]));
 		cmd = CMD_ACK;
 	}else{
 		result = -1;
