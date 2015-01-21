@@ -345,9 +345,9 @@ void * threadTimeOutChecker(void* arg)
 		{
 			if(getIdClient(i) >= 0)
 			{
-				clients[i].isAlive = '0';
-				char aliveMsg[6];
-				sprintf(aliveMsg, "ALIVE");
+				clients[i].isAlive = 0;
+				char aliveMsg[7];
+				sprintf(aliveMsg, "ALIVE%c", 0x1);
 				send2Client(aliveMsg, i, clients[i].client_addr);
 			}
 		}
@@ -355,7 +355,7 @@ void * threadTimeOutChecker(void* arg)
 
 		for(i=0 ; i<MAX_CLIENTS ; i++)
 		{
-			if(getIdClient(i) >= 0 && clients[i].isAlive=='0')
+			if(getIdClient(i) >= 0 && clients[i].isAlive==0)
 			{
 				// TIMEOUT !!
 				disconnectClient(i);
@@ -478,7 +478,7 @@ void ack_frame(int idFrame, int idClient, int cmd_i, char* cmd_s, struct sockadd
 		sprintf(rsp_value, "%d", result);
 	}
 
-	sprintf(rsp, "ACK%c%s%c%s", (char)0x01, cmd_s, (char)0x01, rsp_value);
+	sprintf(rsp, "ACK%c%s%c%s%c", (char)0x01, cmd_s, (char)0x01, rsp_value,0x01);
 
 	send2Client(rsp, -1,sockaddr_client);
 
@@ -488,7 +488,7 @@ void analyzeAck(int idClient, int idFrame)
 {
 	if(getIdClient(idClient) >= 0)
 	{
-		clients[idClient].isAlive = '1';
+		clients[idClient].isAlive = 1;
 	}
 	if(getIdClient(idClient) >= 0 && idFrame >= 0 && idFrame < FRAME_HIST_LEN)
 	{
@@ -590,7 +590,7 @@ void analyzeFrame(char* rcvdFrame, struct sockaddr_in addr_client_frame)
 		result = disconnectClient(atoi(extractedFrame[1]));
 		cmd = CMD_DISCONNECT;
 	}
-	else if(totalExtracted == 4 && strncmp(extractedFrame[0], "ACK", strSize) == 0)
+	else if(totalExtracted == 5 && strncmp(extractedFrame[0], "ACK", strSize) == 0)
 	{
 		analyzeAck(atoi(extractedFrame[1]), atoi(extractedFrame[2]));
 		cmd = CMD_ACK;
@@ -643,6 +643,7 @@ int main(void)
   for (;;)
   {
     addr_len = sizeof(client_addr);
+    memset(msgbuf,0,strlen(msgbuf));
     n = recvfrom(sd, msgbuf, MAX_MSG, 0, (struct sockaddr *)&client_addr, &addr_len);
     if (n == -1)
       perror("recvfrom");

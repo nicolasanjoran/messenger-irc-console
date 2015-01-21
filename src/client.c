@@ -47,7 +47,7 @@ int idClient, sd, frameCounter;
 struct sockaddr_in client_addr, serv_addr;
 char nickname[50];
 char addr[20];
-pthread_t pthreadReceiver;
+pthread_t pthreadReceiver, pthreadAckSystem;
 socklen_t addr_len;
 //==========================================================================//
 
@@ -75,6 +75,8 @@ void transmit(int idChannel, char* message);
 
 void ack_frame(int idFrame, int cmd_i, char* cmd_s, int result);
 
+void * threadAckSystem(void * arg);
+
 void * threadReceiver(void * arg);
 //==========================================================================//
 
@@ -94,12 +96,12 @@ int main (int argc, char *argv[])
 		nickname[strlen(nickname)-1] = '\0';
 	}
 
-	while(SERVER_Connect() < 0)
-	{
-	}
+	SERVER_Connect();
+	
+	
+	
 
-	pthread_create(pthreadReceiver,NULL,threadReceiver,NULL);
-
+	
 	//callback
 	while(1)
 	{
@@ -127,6 +129,7 @@ void * threadReceiver(void * arg)
 	for (;;)
 	{
 		addr_len = sizeof(serv_addr);
+		memset(msgbuf,0,strlen(msgbuf));
 		n = recvfrom(sd, msgbuf, MAX_MSG, 0, (struct sockaddr *)&serv_addr, &addr_len);
 		if (n == -1)
 			perror("recvfrom");
@@ -173,6 +176,7 @@ void analyzeAck( int idFrame)
 {
 	if(idFrame >= 0 && idFrame < FRAME_HIST_LEN)
 	{
+		printf("ACK reçu.\n");
 		framesHist[idFrame].serverAcked = 0;
 	}
 }
@@ -220,10 +224,17 @@ int  SERVER_Connect(){
 		return -1;
 	}
 	serv_addr.sin_port = htons(SERVER_PORT);
+	pthread_create(&pthreadReceiver,NULL,threadReceiver,NULL);
+	pthread_create(&pthreadAckSystem,NULL,threadAckSystem,NULL);
 
 	sprintf(finalMsg,"CONNECT%c%s", 0x01, nickname );
 	result = send2Server(finalMsg);
-	idClient = result;
+	
+	printf("Trying to connect...\n");
+	while(framesHist[result].serverAcked != 0);
+	printf("Connected.\n");
+
+
 	return result;
 }
 
@@ -313,7 +324,8 @@ unsigned char getChecksum(char*s, int stringSize)
 	return sum;
 }
 
-int analyzeFrame(char* rcvdFrame)
+
+int analyzeFrame(char* frame)
 {
 	/*
 	 * This is used for extracting fields from the received frame.
@@ -322,7 +334,8 @@ int analyzeFrame(char* rcvdFrame)
 	int cnt = 0;
 	//char*rcvdFrame = malloc(strlen_int(frame));
 	//memcpy(rcvdFrame, frame, strlen_int(frame));
-	//rcvdFrame = frame;
+	char rcvdFrame[MAX_MSG];
+	strcpy(rcvdFrame, frame);
 	extractedFrame = (char**)malloc(6*sizeof(char*));
 	int totalExtracted=0;
 	int result = 0;
@@ -387,7 +400,7 @@ int analyzeFrame(char* rcvdFrame)
 		transmit(atoi(extractedFrame[1]),extractedFrame[4]);
 		cmd = CMD_TRANSMIT;
 	}
-	else if(totalExtracted == 4 && strncmp(extractedFrame[0], "ACK", strSize) == 0)
+	else if(totalExtracted == 5 && strncmp(extractedFrame[0], "ACK", strSize) == 0)
 	{
 		//TODO ACK system.
 		cmd = CMD_ACK;
@@ -445,7 +458,7 @@ void ack_frame(int idFrame, int cmd_i, char* cmd_s, int result)
 		sprintf(rsp_value, "%d", result);
 	}
 
-	sprintf(rsp, "ACK%c%s%c%s", (char)0x01, cmd_s, (char)0x01, rsp_value);
+	sprintf(rsp, "ACK%c%s%c%s%c", (char)0x01, cmd_s, (char)0x01, rsp_value, 0x01);
 
 	send2Server(rsp);
 
