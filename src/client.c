@@ -85,7 +85,12 @@ int main (int argc, char *argv[])
 
 	//
 	printf("Choisissez un pseudo : \n");
-	scanf("%s",nickname);
+	fgets(nickname,50,stdin);
+	if(strlen(nickname)>0)
+	{
+		nickname[strlen(nickname)-1] = '\0';
+	}
+
 	while(SERVER_Connect() < 0)
 	{
 	}
@@ -195,7 +200,11 @@ int  SERVER_Connect(){
 	// Fill server address structure
 
 	printf("Adresse du serveur : \n");
-	scanf("%s",addr);
+	fgets(addr,20,stdin);
+	if(strlen(addr)>0)
+	{
+		nickname[strlen(addr)-1] = '\0';
+	}
 
 	serv_addr.sin_family = AF_INET;
 	serv_addr.sin_addr.s_addr = inet_addr(addr);
