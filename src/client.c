@@ -229,7 +229,43 @@ void SERVER_Disconnect()
 
 	sprintf(finalMsg,"DISCONNECT%c%d", 0x01, idClient );
 	send2Server(finalMsg);
+}
 
+void CHANNEL_Join(char* channel){
+
+	char finalMsg[MAX_MSG];
+	int idChannel;
+
+	sprintf(finalMsg,"JOIN%c%d%c%s", 0x01, idClient, 0x01, channel);
+
+	idChannel = send2Server(finalMsg);
+
+	if(idChannel < 0)
+	{
+		printf("Can't join %s server",channel);
+	}
+	else
+	{
+		//fill channel information and open/create file
+		char*idChannel_s = malloc(strlen(channel)+1);
+		char * filename = malloc(strlen(idChannel_s)+15);
+		strcpy(idChannel_s, channel);
+
+		channels[idChannel].idChannel = idChannel;
+		channels[idChannel].name = idChannel_s;
+		channels[idChannel].file = open(filename, O_CREAT | O_RDWR, 0666);
+	}
+}
+
+void CHANNEL_Leave(int idChannel){
+
+	char finalMsg[MAX_MSG];
+	int result;
+
+	sprintf(finalMsg,"LEAVE%c%d%c%d", 0x01, idClient, 0x01, idChannel);
+	result = send2Server(finalMsg);
+
+	channels[idChannel].idChannel = -1;
 }
 
 
@@ -384,43 +420,6 @@ void transmit(int idChannel, char* message){
 		//channel not joined
 	}
 
-}
-
-void CHANNEL_Join(char* channel){
-
-	char finalMsg[MAX_MSG];
-	int idChannel;
-
-	sprintf(finalMsg,"JOIN%c%d%c%s", 0x01, idClient, 0x01, channel);
-
-	idChannel = send2Server(finalMsg);
-
-	if(idChannel < 0)
-	{
-		printf("Can't join %s server",channel);
-	}
-	else
-	{
-		//fill channel information and open/create file
-		char*idChannel_s = malloc(strlen(channel)+1);
-		char * filename = malloc(strlen(idChannel_s)+15);
-		strcpy(idChannel_s, channel);
-
-		channels[idChannel].idChannel = idChannel;
-		channels[idChannel].name = idChannel_s;
-		channels[idChannel].file = open(filename, O_CREAT | O_RDWR, 0666);
-	}
-}
-
-void CHANNEL_Leave(int idChannel){
-
-	char finalMsg[MAX_MSG];
-	int result;
-
-	sprintf(finalMsg,"LEAVE%c%d%c%d", 0x01, idClient, 0x01, idChannel);
-	result = send2Server(finalMsg);
-
-	channels[idChannel].idChannel = -1;
 }
 
 void ack_frame(int idFrame, int cmd_i, char* cmd_s, int result)
