@@ -276,10 +276,10 @@ int send2Server(char* msg)
 
 	numTrame = incFrameCounter();
 
-	sprintf(finalMsg,"%s%c%d", msg,0x01,numTrame);
+	sprintf(finalMsg,"%s%c%d%c", msg,0x01,numTrame,0x01);
 	unsigned char chkSum = getChecksum(finalMsg, strlen(finalMsg));
 
-	sprintf(finalMsg,"%s%c%c",finalMsg,0x01,chkSum);
+	sprintf(finalMsg,"%s%c",finalMsg,chkSum);
 
 	framesHist[frameCounter].msg = finalMsg;
 	framesHist[frameCounter].serverAcked = 1;
@@ -423,6 +423,7 @@ void transmit(int idChannel, char* message){
 	}
 
 }
+
 
 void ack_frame(int idFrame, int cmd_i, char* cmd_s, int result)
 {
