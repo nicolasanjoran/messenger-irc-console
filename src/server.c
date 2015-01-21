@@ -465,7 +465,7 @@ int manageMsg(int idClient, int idChannel, char* msg)
 
 void ack_frame(int idFrame, int idClient, int cmd_i, char* cmd_s, struct sockaddr_in sockaddr_client,int result)
 {
-	char rsp_value[10];
+	char rsp_value[15];
 	char rsp[MAX_MSG];
 	if(cmd_s == NULL || cmd_i==-1)
 	{
@@ -478,7 +478,7 @@ void ack_frame(int idFrame, int idClient, int cmd_i, char* cmd_s, struct sockadd
 		sprintf(rsp_value, "%d", result);
 	}
 
-	sprintf(rsp, "ACK%c%s%c%s%c", (char)0x01, cmd_s, (char)0x01, rsp_value,0x01);
+	sprintf(rsp, "ACK%c%s%c%s%c", 0x01, cmd_s, 0x01, rsp_value,0x01);
 
 	send2Client(rsp, -1,sockaddr_client);
 
