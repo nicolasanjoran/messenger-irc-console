@@ -82,7 +82,7 @@ int main (int argc, char *argv[])
 
 	int i;
 	char msgbuf[MAX_MSG];
-
+	frameCounter = 0;
 	//
 	printf("Choisissez un pseudo : \n");
 	fgets(nickname,50,stdin);
@@ -222,7 +222,6 @@ int  SERVER_Connect(){
 	return result;
 }
 
-
 void SERVER_Disconnect()
 {
 	char finalMsg[MAX_MSG];
@@ -271,13 +270,16 @@ void CHANNEL_Leave(int idChannel){
 
 int send2Server(char* msg)
 {
-	unsigned char chkSum = getChecksum(msg, strlen(msg));
 	int result,n,numTrame;
 	char finalMsg[MAX_MSG];
 	char msgbuf[MAX_MSG];
 
 	numTrame = incFrameCounter();
-	sprintf(finalMsg,"%s%c%d%c%c", msg,0x01,numTrame,0x01,chkSum);
+
+	sprintf(finalMsg,"%s%c%d", msg,0x01,numTrame);
+	unsigned char chkSum = getChecksum(finalMsg, strlen(finalMsg));
+
+	sprintf(finalMsg,"%s%c%c",finalMsg,0x01,chkSum);
 
 	framesHist[frameCounter].msg = finalMsg;
 	framesHist[frameCounter].serverAcked = 1;
