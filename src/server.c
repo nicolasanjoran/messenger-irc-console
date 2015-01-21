@@ -280,7 +280,7 @@ int acceptClient(char* clientNamePtr, struct sockaddr_in sockaddr_client)
 		printf("%s: New client cannot be accepted, MAX_CLIENTS number has already been reached.\n", time2string());
 		result = -1;
 	}else{
-		printf("%s %s STRCMP=%d\n",clientName,clients[i].name,strcmp(clientName, clients[i].name));
+		//printf("%s %s STRCMP=%d\n",clientName,clients[i].name,strcmp(clientName, clients[i].name));
 		for(i=0 ; i<MAX_CLIENTS ; i++)
 		{
 			if(clients[i].idClient!= -1 && strcmp(clientName, clients[i].name) == 0)
