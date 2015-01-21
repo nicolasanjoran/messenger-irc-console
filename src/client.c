@@ -1,9 +1,14 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <fcntl.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <time.h>
 
 //========================== DEFINES =======================================//
 #define SERVER_PORT 1500
@@ -28,19 +33,21 @@ struct channel {
 struct channel channels[MAX_CHANNELS];
 int idClient, sd, numTrame;
 struct sockaddr_in client_addr, serv_addr;
-//==========================================================================//
+char nickname[50];
+char addr[20];
+		  //==========================================================================//
 
 
-//============================ Fonctions ===================================//
-//TODO: implement connect
-void  SERVER_Connect();
+		  //============================ Fonctions ===================================//
+		  //TODO: implement connect
+		  int  SERVER_Connect();
 
 void  SERVER_Disconnect();
 
 // Return the idChannel
-void CHANNEL_Connect(char* channel);
+void CHANNEL_Join(char* channel);
 
-void CHANNEL_Disconnect(int idChannel);
+void CHANNEL_Leave(int idChannel);
 
 int send2Server(char *s);
 
@@ -48,7 +55,7 @@ void printInterface();
 
 unsigned char getChecksum(char*s, int stringSize);
 
-void analyzeFrame(char* rcvdFrame, struct sockaddr_in addr_client_frame);
+int analyzeFrame(char* rcvdFrame);
 //==========================================================================//
 
 
@@ -59,50 +66,19 @@ int main (int argc, char *argv[])
 	int i;
 	char msgbuf[MAX_MSG];
 
-	// Command-line error check
-	if (argc < 3)
-		return 1;
-	printf("%s: trying to send to %s\n", argv[0], argv[1]);
+	//
+	printf("Choisissez un pseudo : \n");
+	fgets(nickname,50,stdin);
 
-	// Create socket
-	if ((sd = socket(PF_INET, SOCK_DGRAM, 0)) == -1)
+	while(SERVER_Connect() < 0)
 	{
-		perror(argv[0]);
-		return 1;
 	}
 
-	// Bind socket
-	client_addr.sin_family = AF_INET;
-	client_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-	client_addr.sin_port        = htons(0);
-	if (bind(sd,(struct sockaddr *)&client_addr, sizeof client_addr) == -1)
-	{
-		perror("bind");
-		return 1;
-	}
-
-	// Fill server address structure
-	serv_addr.sin_family = AF_INET;
-	if (inet_aton(argv[1], &(serv_addr.sin_addr)) == 0)
-	{
-		printf("Invalid IP address format <%s>\n", argv[1]);
-		return 1;
-	}
-	else
-	{
-		printf("Connecté au serveur <%s>\n", argv[1]);
-
-	}
-	serv_addr.sin_port = htons(SERVER_PORT);
-
-	//TODO : changer nom msgbuf
 	//callback
 	while(1)
 	{
 		//TODO: Implement printInterface()
 		scanf("%s",msgbuf);
-
-
 	}
 
 
@@ -111,11 +87,67 @@ int main (int argc, char *argv[])
 }
 //==========================================================================//
 
+int  SERVER_Connect(){
+
+	char finalMsg[MAX_MSG];
+	int result;
+	// Create socket
+	if ((sd = socket(PF_INET, SOCK_DGRAM, 0)) == -1)
+	{
+		printf("Socket can't be created\n");
+		return 1;
+	}
+
+	// Bind socket
+	client_addr.sin_family = AF_INET;
+	client_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+	client_addr.sin_port        = htons(0);
+
+	if (bind(sd,(struct sockaddr *)&client_addr, sizeof client_addr) == -1)
+	{
+		perror("bind");
+		return 1;
+	}
+
+
+	// Fill server address structure
+
+	printf("Adresse du serveur : \n");
+	fgets(addr,20,stdin);
+
+	serv_addr.sin_family = AF_INET;
+	serv_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+
+	if ( serv_addr.sin_addr.s_addr == ( in_addr_t)(-1))
+	{
+		printf("Invalid IP address format <%s>\n", addr);
+		return -1;
+	}
+	serv_addr.sin_port = htons(SERVER_PORT);
+
+	sprintf(finalMsg,"CONNECT%c%s", 0x01, nickname );
+	result = send2Server(finalMsg);
+	idClient = result;
+	return result;
+}
+
+void SERVER_Disconnect()
+{
+	char finalMsg[MAX_MSG];
+
+	sprintf(finalMsg,"DISCONNECT%c%d", 0x01, idClient );
+	send2Server(finalMsg);
+
+}
+
+
 int send2Server(char* msg)
 {
 	unsigned char chkSum = getChecksum(msg, strlen(msg));
-	int result;
+	int result,n;
+	socklen_t addr_len;
 	char finalMsg[MAX_MSG];
+	char msgbuf[MAX_MSG];
 
 	fd_set rfds;
 	struct timeval tv;
@@ -135,6 +167,7 @@ int send2Server(char* msg)
 	else
 	{
 		retval = select(sd+1,&rfds, NULL,NULL,&tv);
+
 		if(retval == -1)
 		{
 			perror("select()");
@@ -143,6 +176,17 @@ int send2Server(char* msg)
 		else if(retval)
 		{
 			//TODO: look for acknowledgment
+
+			addr_len = sizeof(serv_addr);
+			n = recvfrom(sd, msgbuf, MAX_MSG, 0, (struct sockaddr *)&serv_addr, &addr_len);
+			if (n == -1)
+			{
+				perror("recvfrom");
+			}
+			else
+			{
+				result = analyzeFrame(msgbuf);
+			}
 		}
 		else
 		{
@@ -170,7 +214,7 @@ unsigned char getChecksum(char*s, int stringSize)
 	return sum;
 }
 
-void analyzeFrame(char* rcvdFrame, struct sockaddr_in addr_client_frame)
+int analyzeFrame(char* rcvdFrame)
 {
 	/*
 	 * This is used for extracting fields from the received frame.
@@ -237,19 +281,21 @@ void analyzeFrame(char* rcvdFrame, struct sockaddr_in addr_client_frame)
 	if(totalExtracted == 4 && strncmp(extractedFrame[0], "CONNECT", strSize) == 0)
 	{
 		//TODO : Connect
-		idClient = result;
 		cmd = CMD_CONNECT;
 	}
 	else if(totalExtracted == 4 && strncmp(extractedFrame[0], "TRANSMIT", strSize) == 0)
 	{
-		result = transmit(atoi(extractedFrame[1]));
+		result = transmit(atoi(extractedFrame[1]),extractedFrame[4]);
 		cmd = CMD_TRANSMIT;
 	}
 	else if(totalExtracted == 4 && strncmp(extractedFrame[0], "ACK", strSize) == 0)
 	{
 		//TODO ACK system.
 		cmd = CMD_ACK;
-	}else{
+		result = atoi(extractedFrame[1]);
+	}
+	else
+	{
 		result = -1;
 		printf("%s: Incoming frame does not correspond to expected scheme : ACK will not be granted.\n", time2string());
 	}
@@ -257,42 +303,71 @@ void analyzeFrame(char* rcvdFrame, struct sockaddr_in addr_client_frame)
 	//TODO Produce response (ACK).
 	if(cmd != CMD_ACK)
 	{
-		ack_frame(rcvdIdFrame, idClient, cmd, extractedFrame[0], addr_client_frame, result);
+		ack_frame(rcvdIdFrame, cmd, extractedFrame[0], result);
 	}
 
+	return result;
 }
 
-int transmit(int idChannel, char* message){
+void transmit(int idChannel, char* message){
 
 	int result;
-
-	if((result = write(channels[idChannel].file, message, strlen(message))) < 0)
+	if(channels[idChannel].idChannel != -1)
 	{
+		if((result = write(channels[idChannel].file, message, strlen(message))) < 0)
+		{
 			perror("write");
+		}
+		else
+		{
+			//TODO: ACK
+		}
+	}
+	else
+	{
+		//channel not joined
 	}
 
 }
 
-void CHANNEL_Connect(char* channel){
+void CHANNEL_Join(char* channel){
 
 	char finalMsg[MAX_MSG];
+	int idChannel;
 
 	sprintf(finalMsg,"JOIN%c%d%c%s", 0x01, idClient, 0x01, channel);
 
-	send2Server(finalMsg);
+	idChannel = send2Server(finalMsg);
+
+	if(idChannel < 0)
+	{
+		printf("Can't join %s server",channel);
+	}
+	else
+	{
+		//fill channel information and open/create file
+		char*idChannel_s = malloc(strlen(channel)+1);
+		char * filename = malloc(strlen(idChannel_s)+15);
+		strcpy(idChannel_s, channel);
+
+		channels[idChannel].idChannel = idChannel;
+		channels[idChannel].name = idChannel_s;
+		channels[idChannel].file = open(filename, O_CREAT | O_RDWR, 0666);
+	}
 }
 
-void CHANNEL_Disconnect(int idChannel){
+void CHANNEL_Leave(int idChannel){
 
 	char finalMsg[MAX_MSG];
 	int result;
 
 	sprintf(finalMsg,"LEAVE%c%d%c%d", 0x01, idClient, 0x01, idChannel);
-
 	result = send2Server(finalMsg);
+
+	channels[idChannel] = -1;
 }
 
-void ack_frame(int idFrame, int idClient, int cmd_i, char* cmd_s, struct sockaddr_in sockaddr_client,int result)
+void ack_frame(int idFrame, int cmd_i, char* cmd_s, int result)
 {
 	char rsp_value[10];
 	char rsp[MAX_MSG];
@@ -309,7 +384,7 @@ void ack_frame(int idFrame, int idClient, int cmd_i, char* cmd_s, struct sockadd
 
 	sprintf(rsp, "ACK%c%s%c%s", (char)0x01, cmd_s, (char)0x01, rsp_value);
 
-	send2Client(rsp, sockaddr_client);
+	send2Server(rsp);
 
 }
 
