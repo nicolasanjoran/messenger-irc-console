@@ -150,11 +150,13 @@ unsigned char getChecksum(char*s, int stringSize)
 
 void send2Client(char* msg, int idClient, struct sockaddr_in sockaddr_client)
 {
+	char finalMsg[MAX_MSG];
+	
+	sprintf(finalMsg,"%s%c%u%c", msg,0x01, incFrameCounter(),0x01);
+	
 	unsigned char chkSum = getChecksum(msg, strlen(msg));
 
-	char finalMsg[MAX_MSG];
-
-	sprintf(finalMsg,"%s%c%u%c%c", msg, 0x01, incFrameCounter(), 0x01, chkSum);
+	sprintf(finalMsg,"%s%c", msg, chkSum);
 	if(idClient != -1)
 	{
 		framesHist[frameCounter].msg = finalMsg;
@@ -504,6 +506,9 @@ void analyzeFrame(char* rcvdFrame, struct sockaddr_in addr_client_frame)
 	//char*rcvdFrame = malloc(strlen_int(frame));
 	//memcpy(rcvdFrame, frame, strlen_int(frame));
 	//rcvdFrame = frame;
+	char frameCopy[MAX_MSG];
+	strcpy(frameCopy, rcvdFrame);
+
 	extractedFrame = (char**)malloc(6*sizeof(char*));
 	int totalExtracted=0;
 	int result = 0;
@@ -542,7 +547,8 @@ void analyzeFrame(char* rcvdFrame, struct sockaddr_in addr_client_frame)
 		/*
 		 * Checksum processing
 		 */
-		printf("Processed checksum: %x    ::  Actual:%x\n",getChecksum(rcvdFrame, strlen(rcvdFrame)-1), (unsigned char)extractedFrame[totalExtracted-1][0]);
+		 //printf("rcvdFrameLen: %d\n", strlen(frameCopy));
+		printf("Processed checksum: %x    ::  Actual:%x\n",getChecksum(frameCopy, strlen(frameCopy)-1), (unsigned char)extractedFrame[totalExtracted-1][0]);
 		//TODO Uncomment checksum checkers !!!
 		if(0)//(unsigned char)extractedFrame[totalExtracted-1][0] != getChecksum(rcvdFrame, strlen(rcvdFrame)-1))
 		{
