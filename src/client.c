@@ -41,7 +41,7 @@ struct frameStruct{
 };
 
 struct channel channels[MAX_CHANNELS];
-struct frameStruct framesHist[];
+struct frameStruct framesHist[FRAME_HIST_LEN];
 int idClient, sd, frameCounter;
 struct sockaddr_in client_addr, serv_addr;
 char nickname[50];
@@ -69,6 +69,10 @@ void printInterface();
 unsigned char getChecksum(char*s, int stringSize);
 
 int analyzeFrame(char* rcvdFrame);
+
+void transmit(int idChannel, char* message);
+
+void ack_frame(int idFrame, int cmd_i, char* cmd_s, int result);
 //==========================================================================//
 
 
@@ -81,8 +85,7 @@ int main (int argc, char *argv[])
 
 	//
 	printf("Choisissez un pseudo : \n");
-	fgets(nickname,50,stdin);
-
+	scanf("%s",nickname);
 	while(SERVER_Connect() < 0)
 	{
 	}
@@ -192,7 +195,7 @@ int  SERVER_Connect(){
 	// Fill server address structure
 
 	printf("Adresse du serveur : \n");
-	fgets(addr,20,stdin);
+	scanf("%s",addr);
 
 	serv_addr.sin_family = AF_INET;
 	serv_addr.sin_addr.s_addr = inet_addr(addr);
@@ -329,7 +332,7 @@ int analyzeFrame(char* rcvdFrame)
 	}
 	else if(totalExtracted == 4 && strncmp(extractedFrame[0], "TRANSMIT", strSize) == 0)
 	{
-		result = transmit(atoi(extractedFrame[1]),extractedFrame[4]);
+		transmit(atoi(extractedFrame[1]),extractedFrame[4]);
 		cmd = CMD_TRANSMIT;
 	}
 	else if(totalExtracted == 4 && strncmp(extractedFrame[0], "ACK", strSize) == 0)
@@ -341,7 +344,7 @@ int analyzeFrame(char* rcvdFrame)
 	else
 	{
 		result = -1;
-		printf("%s: Incoming frame does not correspond to expected scheme : ACK will not be granted.\n", time2string());
+		printf("Incoming frame does not correspond to expected scheme : ACK will not be granted.\n");
 	}
 
 	//TODO Produce response (ACK).
