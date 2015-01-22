@@ -54,7 +54,8 @@ struct Gterm{
 
 struct channel channels[MAX_CHANNELS];
 struct frameStruct framesHist[FRAME_HIST_LEN];
-
+time_t timestamp;
+struct tm * t;
 struct Gterm gterm;
 
 int idClient, sd, frameCounter, currentChannel;
@@ -68,7 +69,6 @@ socklen_t addr_len;
 
 
 //============================ Fonctions ===================================//
-//TODO: implement connect
 int  SERVER_Connect();
 
 void  SERVER_Disconnect();
@@ -76,7 +76,7 @@ void  SERVER_Disconnect();
 // Return the idChannel
 void CHANNEL_Join(char* channel);
 
-void CHANNEL_Leave(int idChannel);
+void CHANNEL_Leave();
 
 int send2Server(char *s);
 
@@ -101,8 +101,9 @@ void GRAPH_print();
 void GRAPH_PrintSeparator(char separator);
 
 void analyzeMessage(char* frame);
+void say(char* message);
+char* time2string();
 //==========================================================================//
-
 
 //============================= MAIN =======================================//
 int main (int argc, char *argv[])
@@ -122,7 +123,7 @@ int main (int argc, char *argv[])
 	}
 
 	SERVER_Connect();
-
+	/*
 	GRAPH_init();
 	//callback
 	while(1)
@@ -133,7 +134,13 @@ int main (int argc, char *argv[])
 		//TODO: Implement printInterface()
 		scanf("%s",msgbuf);
 	}
-
+	 */
+	while(1)
+	{
+		fgets(msgbuf,MAX_MSG,stdin);
+		msgbuf[strlen(msgbuf)-1] = '\0';
+		analyzeMessage(msgbuf);
+	}
 
 	close(sd);
 	return 0;
@@ -207,7 +214,6 @@ void analyzeAck( int idFrame, int resp)
 	}
 }
 
-
 int  SERVER_Connect(){
 
 
@@ -271,45 +277,55 @@ void SERVER_Disconnect()
 
 	sprintf(finalMsg,"DISCONNECT%c%d", 0x01, idClient );
 	send2Server(finalMsg);
+	printf("Déconnecté du serveur\n");
+	exit(0);
 }
 
 void CHANNEL_Join(char* channel){
 
 	char finalMsg[MAX_MSG];
 	int idChannel;
+	int numtrame;
 
 	sprintf(finalMsg,"JOIN%c%d%c%s", 0x01, idClient, 0x01, channel);
 
-	idChannel = send2Server(finalMsg);
+	numtrame = send2Server(finalMsg);
 
-	if(idChannel < 0)
-	{
-		printf("Can't join %s server",channel);
-	}
-	else
-	{
-		//fill channel information and open/create file
-		char*idChannel_s = malloc(strlen(channel)+1);
-		char * filename = malloc(strlen(idChannel_s)+15);
-		strcpy(idChannel_s, channel);
 
-		channels[idChannel].idChannel = idChannel;
-		channels[idChannel].name = idChannel_s;
-		channels[idChannel].file = open(filename, O_CREAT | O_RDWR, 0666);
-	}
+	while(framesHist[numtrame].serverAcked != 0);
+	idChannel = framesHist[numtrame].resp;
+
+	//fill channel information and open/create file
+
+	char*idChannel_s = malloc(strlen(channel)+1);
+	char * filename = malloc(strlen(idChannel_s)+15);
+	strcpy(idChannel_s, channel);
+	sprintf(filename,"channels/%s.hist",idChannel_s);
+	channels[idChannel].idChannel = idChannel;
+	channels[idChannel].name = idChannel_s;
+	channels[idChannel].file = open(filename, O_CREAT | O_RDWR, 0666);
+	printf("Connecté au serveur");
+	currentChannel = idChannel;
 }
 
-void CHANNEL_Leave(int idChannel){
+void CHANNEL_Leave(){
 
 	char finalMsg[MAX_MSG];
 	int result;
 
-	sprintf(finalMsg,"LEAVE%c%d%c%d", 0x01, idClient, 0x01, idChannel);
-	result = send2Server(finalMsg);
+	if(currentChannel != -1)
+	{
+		sprintf(finalMsg,"LEAVE%c%d%c%d", 0x01, idClient, 0x01, currentChannel);
+		send2Server(finalMsg);
+		channels[currentChannel].idChannel = -1;
 
-	channels[idChannel].idChannel = -1;
+		//currentChannel = incCurrentChannel(); //Get the next channel
+	}
+	else
+	{
+		printf("Vous n'êtes pas dans un salon");
+	}
 }
-
 
 int send2Server(char* msg)
 {
@@ -357,7 +373,6 @@ unsigned char getChecksum(char*s, int stringSize)
 	//printf("\n");
 	return sum;
 }
-
 
 int analyzeFrame(char* frame)
 {
@@ -426,7 +441,6 @@ int analyzeFrame(char* frame)
 	int strSize = sizeof(extractedFrame[0])/sizeof(char);
 	if(totalExtracted == 4 && strncmp(extractedFrame[0], "CONNECT", strSize) == 0)
 	{
-		//TODO : Connect
 		cmd = CMD_CONNECT;
 	}
 	else if(totalExtracted == 4 && strncmp(extractedFrame[0], "TRANSMIT", strSize) == 0)
@@ -436,14 +450,12 @@ int analyzeFrame(char* frame)
 	}
 	else if(totalExtracted == 5 && strncmp(extractedFrame[0], "ACK", strSize) == 0)
 	{
-		//TODO ACK system.
 		cmd = CMD_ACK;
 		analyzeAck(atoi(extractedFrame[1]), atoi(extractedFrame[2]));
 		result = atoi(extractedFrame[1]);
 	}
 	else if(totalExtracted == 3 && strncmp(extractedFrame[0], "ALIVE", strSize) == 0)
 	{
-		//TODO ACK system.
 		cmd = CMD_ALIVE;
 		result = atoi(extractedFrame[1]);
 	}
@@ -453,7 +465,6 @@ int analyzeFrame(char* frame)
 		printf("Incoming frame does not correspond to expected scheme : ACK will not be granted.\n");
 	}
 
-	//TODO Produce response (ACK).
 	if(cmd != CMD_ACK)
 	{
 		ack_frame(rcvdIdFrame, cmd, extractedFrame[0], result);
@@ -481,6 +492,7 @@ void ack_frame(int idFrame, int cmd_i, char* cmd_s, int result)
 
 	send2Server(rsp);
 }
+
 void analyzeMessage(char* frame)
 {
 	char cmdFrame[MAX_MSG];
@@ -496,7 +508,7 @@ void analyzeMessage(char* frame)
 		if(strlen(cmdFrame) > strlen("JOIN")+1)
 		{
 			strncpy(parameter, cmdFrame + strlen("JOIN")+1,strlen(cmdFrame) - strlen("JOIN"));
-			//CHANNEL_Join(parameter);
+			CHANNEL_Join(parameter);
 			printf("Cmd JOIN : %s\n",parameter);
 		}
 		else
@@ -506,12 +518,12 @@ void analyzeMessage(char* frame)
 	}
 	else if(strncmp(cmdFrame,"LEAVE",strlen("LEAVE")) == 0)
 	{
-		//CHANNEL_Leave()
+		CHANNEL_Leave();
 	}
 	else if(strncmp(cmdFrame,"DISCONNECT",strlen("DISCONNECT")) == 0)
 	{
 
-		//SERVER_Disconnect();
+		SERVER_Disconnect();
 
 	}
 	else if(strncmp(cmdFrame,"NEXT",strlen("NEXT")) == 0)
@@ -527,7 +539,7 @@ void analyzeMessage(char* frame)
 	}
 	else
 	{
-		//say();
+		say(cmdFrame);
 		printf("Cmd say : %s\n",cmdFrame);
 	}
 
@@ -542,6 +554,11 @@ void say(char* message){
 	{
 		sprintf(finalMsg,"SAY%c%d%c%d%c%s",0x01,idClient,0x01,currentChannel,0x01,finalMsg);
 		send2Server(finalMsg);
+		sprintf(finalMsg, "<<%s> -- %s> %s\n", nickname, time2string(), finalMsg);
+		if(write(channels[currentChannel].file, message, strlen(message)) < 0)
+		{
+			perror("write");
+		}
 	}
 	else
 	{
@@ -626,8 +643,6 @@ void GRAPH_print()
 
 }
 
-
-
 void transmit(int idChannel, char* message){
 
 	int result;
@@ -637,13 +652,19 @@ void transmit(int idChannel, char* message){
 		{
 			perror("write");
 		}
-		else
-		{
-			//TODO: ACK
-		}
 	}
 	else
 	{
 		//channel not joined
 	}
+}
+
+char* time2string()
+{
+	char* stringTime = malloc(20);
+	timestamp = time(NULL);
+    t = localtime(&timestamp);
+    sprintf(stringTime, "%02d-%02d-%04d %02d:%02d:%02d", t->tm_mday, t->tm_mon+1, t->tm_year+1900, t->tm_hour, t->tm_min, t->tm_sec);
+
+    return stringTime;
 }
