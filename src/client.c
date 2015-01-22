@@ -404,7 +404,7 @@ void CHANNEL_Leave(){
 		send2Server(finalMsg);
 		channels[currentChannel].idChannel = -1;
 
-		//currentChannel = incCurrentChannel(); //Get the next channel
+		currentChannel =-1; //Get the next channel
 	}
 	else
 	{
