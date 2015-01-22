@@ -164,8 +164,11 @@ int main (int argc, char *argv[])
 				char messageInput[MAX_INPUT];
 				strcpy(messageInput, input);
 				analyzeMessage(messageInput);
-				memset(input, 0, MAX_INPUT);
-				inputIdx=0;
+				for(i=0 ; i<MAX_INPUT ; i++)
+				{
+					input[i] = 0;
+				}
+				inputIdx='\0';
 			}
 			else if(c=='\t')
 			{
@@ -363,7 +366,7 @@ void SERVER_Disconnect()
 
 	sprintf(finalMsg,"DISCONNECT%c%d", 0x01, idClient );
 	send2Server(finalMsg);
-	printf("Déconnecté du serveur\n");
+	//printf("Déconnecté du serveur\n");
 	exit(0);
 }
 
@@ -384,8 +387,8 @@ void CHANNEL_Join(char* channel){
 	//fill channel information and open/create file
 
 	char*idChannel_s = malloc(strlen(channel)+1);
-	char * filename = malloc(strlen(idChannel_s)+15);
 	strcpy(idChannel_s, channel);
+	char * filename = malloc(strlen(idChannel_s)+15);
 	sprintf(filename,"channels/%s.hist",idChannel_s);
 	channels[idChannel].idChannel = idChannel;
 	channels[idChannel].name = idChannel_s;
