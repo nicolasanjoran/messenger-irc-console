@@ -531,9 +531,9 @@ int analyzeFrame(char* frame)
 	{
 		cmd = CMD_CONNECT;
 	}
-	else if(totalExtracted == 4 && strncmp(extractedFrame[0], "TRANSMIT", strSize) == 0)
+	else if(totalExtracted >= 4 && strncmp(extractedFrame[0], "TRANSMIT", strSize) == 0)
 	{
-		transmit(atoi(extractedFrame[1]),extractedFrame[4]);
+		transmit(atoi(extractedFrame[1]),extractedFrame[3]);
 		cmd = CMD_TRANSMIT;
 	}
 	else if(totalExtracted == 5 && strncmp(extractedFrame[0], "ACK", strSize) == 0)
@@ -806,3 +806,5 @@ char* time2string()
 
     return stringTime;
 }
+
+
