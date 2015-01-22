@@ -10,8 +10,12 @@
 #include <sys/stat.h>
 #include <time.h>
 #include <pthread.h>
+#include <termios.h>
 
 //========================== DEFINES =======================================//
+
+#define NB_ENABLE 1
+#define NB_DISABLE 2
 #define clrscr() printf("\033[H\033[2J")
 #define couleur(param) printf("\033[%sm",param)
 
@@ -27,6 +31,8 @@
 #define CMD_ALIVE 5
 
 #define FRAME_HIST_LEN 500
+
+#define MAX_INPUT 300
 //==========================================================================//
 
 //=========================== GLOBAL VARs & Types ==========================//
@@ -64,6 +70,8 @@ char nickname[50];
 char addr[20];
 pthread_t pthreadReceiver, pthreadAckSystem;
 socklen_t addr_len;
+char input[MAX_INPUT];
+int inputIdx;
 
 //==========================================================================//
 
@@ -98,7 +106,13 @@ void GRAPH_init();
 
 void GRAPH_print();
 
-void GRAPH_PrintSeparator(char separator);
+void GRAPH_PrintSeparator(char separator, char*msg);
+
+char inputAvailable();
+
+void nonblock(int state);
+
+void incCurrentChannel();
 
 void analyzeMessage(char* frame);
 void say(char* message);
@@ -110,6 +124,7 @@ int main (int argc, char *argv[])
 {
 
 	int i;
+	inputIdx = 0;
 	char msgbuf[MAX_MSG];
 	frameCounter = 0;
 	currentChannel = -1;
@@ -124,15 +139,49 @@ int main (int argc, char *argv[])
 
 	SERVER_Connect();
 
+	system ("stty -echo");
+	nonblock(NB_ENABLE);
 	GRAPH_init();
+	GRAPH_print();
 	//callback
 	while(1)
 	{
-		GRAPH_print();
-		sleep(5);
-
+		
+		//system("clear");
+		
+		usleep(100000);
+		if(inputAvailable())
+		{
+			char c;
+			c=fgetc(stdin);
+			if(c==127)
+			{
+				inputIdx--;
+				input[inputIdx]='\0';
+			}
+			else if(c=='\n')
+			{
+				char messageInput[MAX_INPUT];
+				strcpy(messageInput, input);
+				analyzeMessage(messageInput);
+				memset(input, 0, MAX_INPUT);
+				inputIdx=0;
+			}
+			else if(c=='\t')
+			{
+				incCurrentChannel();
+			}
+			else if(inputIdx < MAX_INPUT)
+			{
+				input[inputIdx]=c;
+				inputIdx++;
+			}
+			GRAPH_print();
+			fflush(stdin);
+		}
+		//printf("%s\n", tab);
 		//TODO: Implement printInterface()
-		scanf("%s",msgbuf);
+		//scanf("%s",msgbuf);
 	}
 	 /*
 	while(1)
@@ -153,6 +202,42 @@ int incFrameCounter()
 	return frameCounter;
 }
 
+char inputAvailable()  
+{
+  struct timeval tv;
+  fd_set fds;
+  tv.tv_sec = 0;
+  tv.tv_usec = 0;
+  FD_ZERO(&fds);
+  FD_SET(STDIN_FILENO, &fds);
+  select(STDIN_FILENO+1, &fds, NULL, NULL, &tv);
+  return (FD_ISSET(0, &fds));
+}
+
+void nonblock(int state)
+{
+    struct termios ttystate;
+ 
+    //get the terminal state
+    tcgetattr(STDIN_FILENO, &ttystate);
+ 
+    if (state==NB_ENABLE)
+    {
+        //turn off canonical mode
+        ttystate.c_lflag &= ~ICANON;
+        //minimum of number input read.
+        ttystate.c_cc[VMIN] = 1;
+    }
+    else if (state==NB_DISABLE)
+    {
+        //turn on canonical mode
+        ttystate.c_lflag |= ICANON;
+    }
+    //set the terminal attributes.
+    tcsetattr(STDIN_FILENO, TCSANOW, &ttystate);
+ 
+}
+
 void * threadReceiver(void * arg)
 {
 	int n;
@@ -166,10 +251,11 @@ void * threadReceiver(void * arg)
 		if (n == -1)
 			perror("recvfrom");
 		else {
-			printf("received from %s: %s\n", inet_ntoa(serv_addr.sin_addr), msgbuf);
+			//printf("received from %s: %s\n", inet_ntoa(serv_addr.sin_addr), msgbuf);
 			analyzeFrame(msgbuf);
 		}
 	}
+	return NULL;
 }
 
 void * threadAckSystem(void * arg)
@@ -208,7 +294,7 @@ void analyzeAck( int idFrame, int resp)
 {
 	if(idFrame >= 0 && idFrame < FRAME_HIST_LEN)
 	{
-		printf("ACK reçu.\n");
+		//printf("ACK reçu.\n");
 		framesHist[idFrame].resp = resp;
 		framesHist[idFrame].serverAcked = 0;
 	}
@@ -343,12 +429,12 @@ int send2Server(char* msg)
 	framesHist[frameCounter].msg = finalMsg;
 	framesHist[frameCounter].serverAcked = 1;
 
-	printf("SEND=> %s\n", finalMsg);
-	for(i=0 ; i<strlen(finalMsg) ; i++)
+	//printf("SEND=> %s\n", finalMsg);
+	/*for(i=0 ; i<strlen(finalMsg) ; i++)
 	{
 		printf("%02x ", finalMsg[i]);
 	}
-	printf("\n");
+	printf("\n");*/
 
 	if (sendto(sd, finalMsg, strlen(finalMsg) + 1, 0, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) == -1)
 	{
@@ -371,7 +457,7 @@ unsigned char getChecksum(char*s, int stringSize)
 		sum += s[i];
 	}
 	//printf("\n");
-	return sum;
+	return (sum%10)+97;
 }
 
 int analyzeFrame(char* frame)
@@ -400,11 +486,11 @@ int analyzeFrame(char* frame)
 	for(idx=0 ; idx<6 ; idx++)
 	{
 		extractedFrame[idx+1] = strtok(NULL, &delimiter);
-		printf("idx=%d, rcvd: %s\n", idx, extractedFrame[idx]);
+		//printf("idx=%d, rcvd: %s\n", idx, extractedFrame[idx]);
 		if(extractedFrame[idx]==NULL) break;
 
 	}
-	printf("TotalExtracted: %d\n", idx);
+	//printf("TotalExtracted: %d\n", idx);
 	totalExtracted=idx;
 
 	/*
@@ -423,14 +509,14 @@ int analyzeFrame(char* frame)
 		/*
 		 * Checksum processing
 		 */
-		printf("Processed checksum: %x    ::  Actual:%x\n",getChecksum(rcvdFrame, strlen(rcvdFrame)-1), (unsigned char)extractedFrame[totalExtracted-1][0]);
+		//printf("Processed checksum: %x    ::  Actual:%x\n",getChecksum(rcvdFrame, strlen(rcvdFrame)-1), (unsigned char)extractedFrame[totalExtracted-1][0]);
 		//TODO Uncomment checksum checkers !!!
 		if(0)//(unsigned char)extractedFrame[totalExtracted-1][0] != getChecksum(rcvdFrame, strlen(rcvdFrame)-1))
 		{
 			totalExtracted = 0;
 		}else
 		{
-			printf("idFrame: %d\n", atoi(extractedFrame[totalExtracted-2]));
+			//printf("idFrame: %d\n", atoi(extractedFrame[totalExtracted-2]));
 			rcvdIdFrame = atoi(extractedFrame[totalExtracted-2]);
 		}
 	}
@@ -462,7 +548,7 @@ int analyzeFrame(char* frame)
 	else
 	{
 		result = -1;
-		printf("Incoming frame does not correspond to expected scheme : ACK will not be granted.\n");
+		//printf("Incoming frame does not correspond to expected scheme : ACK will not be granted.\n");
 	}
 
 	if(cmd != CMD_ACK)
@@ -611,38 +697,86 @@ void GRAPH_println(char*msg, int line)
 		printf(" ");
 		i++;
 	}
-	printf("#");
+	printf("|");
 	if(line==0)
 	{
-		for(i=0 ; i<(gterm.sidebar_width-7)/2 ; i++) printf(" ");
-		printf("CLIENTS\n");
+		for(i=0 ; i<(gterm.sidebar_width-8)/2 ; i++) printf(" ");
+		printf("CHANNELS\n");
+	}
+	else if(line==1)
+	{
+		for(i=0 ; i<gterm.sidebar_width-2 ; i++) printf("-");
 	}else{
 		for(i=0 ; i<gterm.sidebar_width-2 ; i++) printf(" ");
 	}
 }
 
-void GRAPH_PrintSeparator(char separator)
+void GRAPH_PrintSeparator(char separator, char* msg)
 {
 	int i;
-	for(i=0; i<gterm.width ; i++)
+	int msgSize = 0;
+	if(msg!=NULL)
+	{
+		msgSize=strlen(msg);
+	}
+
+	for(i=0; i<(gterm.width-msgSize)/2 ; i++)
 	{
 		printf("%c", separator);
 	}
+	if(msgSize > 0)
+	{
+		printf("%s", msg);
+	}
+	for(; i+msgSize<gterm.width ; i++)
+	{
+		printf("%c", separator);
+	}
+
 }
 
 void GRAPH_print()
 {
 	int i;
+
+	GRAPH_init();
+
 	system("clear");
-	GRAPH_PrintSeparator('-');
+	GRAPH_PrintSeparator('-', "[MESSENGER 1.0]");
 
 	for (i = 0; i < gterm.height-4; i++)
 	{
 		GRAPH_println("test!!", i);
 	}
+	GRAPH_PrintSeparator('-', NULL);
+	printf(" >> %s", input);
+
+	fflush(stdout);
 
 
 }
+
+
+void incCurrentChannel()
+{
+	int i=0;
+	int nbchannel = currentChannel;
+	int result  = -1;
+	if(nbchannel == -1) nbchannel = 0;
+	for(; i<10 ; i++)
+	{
+		if(channels[(i+nbchannel)%MAX_CHANNELS].idChannel != -1)
+		{
+			result = channels[(i+nbchannel)%MAX_CHANNELS].idChannel;
+			break;
+		}
+	}
+	if(result != -1)
+	{
+		currentChannel = result;
+	}
+}
+
 
 void transmit(int idChannel, char* message){
 

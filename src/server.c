@@ -143,7 +143,7 @@ unsigned char getChecksum(char*s, int stringSize)
 		sum += s[i];
 	}
 	//printf("\n");
-	return sum;
+	return (sum%10)+97;
 }
 
 
@@ -263,6 +263,7 @@ int CHANNEL_JoinClient(int idClient, char* idChannel_s_ptr)
 int CHANNEL_LeaveClient(int idClient, int idChannel)
 {
 	int i;
+	printf("User %d left channel %d\n", idClient, idChannel);
 
 	for(i=0 ; i<MAX_CLIENTS && idClient<MAX_CLIENTS && idChannel<MAX_CHANNELS ; i++)
 	{
@@ -510,7 +511,7 @@ void analyzeAck(int idClient, int idFrame)
 	}
 }
 
-void analyzeFrame(char* rcvdFrame, struct sockaddr_in addr_client_frame)
+void analyzeFrame(char* rcvdFrameFromCall, struct sockaddr_in addr_client_frame)
 {
 	/*
 	 * This is used for extracting fields from the received frame.
@@ -521,8 +522,9 @@ void analyzeFrame(char* rcvdFrame, struct sockaddr_in addr_client_frame)
 	//memcpy(rcvdFrame, frame, strlen_int(frame));
 	//rcvdFrame = frame;
 	char frameCopy[MAX_MSG];
-	strcpy(frameCopy, rcvdFrame);
-
+	char rcvdFrame[MAX_MSG];
+	strcpy(frameCopy, rcvdFrameFromCall);
+	strcpy(rcvdFrame, rcvdFrameFromCall);
 	extractedFrame = (char**)malloc(6*sizeof(char*));
 	int totalExtracted=0;
 	int result = 0;
@@ -553,6 +555,7 @@ void analyzeFrame(char* rcvdFrame, struct sockaddr_in addr_client_frame)
 		//printf("i=%d, rcvd: %s\n", i, extractedFrame[i]);
 	}
 
+	if(frameCopy[strlen(frameCopy)-1] == 0x01) totalExtracted++;
 	/*
 	 * Extract idFrame
 	 */
@@ -562,7 +565,7 @@ void analyzeFrame(char* rcvdFrame, struct sockaddr_in addr_client_frame)
 		 * Checksum processing
 		 */
 		 //printf("rcvdFrameLen: %d\n", strlen(frameCopy));
-		printf("Processed checksum: %x    ::  Actual:%x\n",getChecksum(frameCopy, strlen(frameCopy)-1), (unsigned char)extractedFrame[totalExtracted-1][0]);
+		printf("Processed checksum: %x    ::  Actual:%x\n",getChecksum(frameCopy, strlen(frameCopy)-1), (unsigned char)frameCopy[strlen(frameCopy)-1]);
 		//TODO Uncomment checksum checkers !!!
 		if(0)//(unsigned char)extractedFrame[totalExtracted-1][0] != getChecksum(rcvdFrame, strlen(rcvdFrame)-1))
 		{
@@ -594,7 +597,7 @@ void analyzeFrame(char* rcvdFrame, struct sockaddr_in addr_client_frame)
 		manageMsg(atoi(extractedFrame[1]), atoi(extractedFrame[2]), extractedFrame[3]);
 		cmd = CMD_SAY;
 	}
-	else if(totalExtracted == 4 && strncmp(extractedFrame[0], "LEAVE", strSize) == 0)
+	else if(totalExtracted == 5 && strncmp(extractedFrame[0], "LEAVE", strSize) == 0)
 	{
 		result = CHANNEL_LeaveClient(atoi(extractedFrame[1]), atoi(extractedFrame[2]));
 		cmd = CMD_LEAVE;
