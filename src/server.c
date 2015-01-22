@@ -78,9 +78,86 @@ time_t timestamp;
 struct tm * t; 
 //==========================================================================//
 
+//============================ Threads ===================================//
+
+/**
+ * Surveille que les clients sont encore connectés
+ */
+void * threadTimeOutChecker(void* arg)
+{
+	int i=0;
+	while(1)
+	{
+		sleep(10);
+
+		for(i=0 ; i<MAX_CLIENTS ; i++)
+		{
+			if(getIdClient(i) >= 0)
+			{
+				clients[i].isAlive = 0;
+				char aliveMsg[7];
+				sprintf(aliveMsg, "ALIVE");
+				send2Client(aliveMsg, i, clients[i].client_addr);
+			}
+		}
+		sleep(2);
+
+		for(i=0 ; i<MAX_CLIENTS ; i++)
+		{
+			if(getIdClient(i) >= 0 && clients[i].isAlive==0)
+			{
+				// TIMEOUT !!
+				disconnectClient(i);
+			}
+		}
+	}
+
+	return NULL;
+}
+
+/**
+ * Gère les acquittements des clients
+ */
+void * threadAckSystem(void * arg)
+{
+	int i, j;
+	while(1)
+	{
+		sleep(1);
+		for(i=0 ; i<FRAME_HIST_LEN && framesHist[i].active == 1 ; i++)
+		{
+			int clientCounter = 0;
+			for(j=0 ; j<MAX_CLIENTS ; j++)
+			{
+				if(framesHist[i].clientAcked[j] == 1)
+				{
+					framesHist[i].clientAcked[j]++;
+					clientCounter++;
+				}
+				else if(framesHist[i].clientAcked[j] == 2)
+				{
+					framesHist[i].clientAcked[j] = 1;
+					sendto(sd, framesHist[i].msg, strlen(framesHist[i].msg), 0, (struct sockaddr *)&clients[j].client_addr, addr_len);
+					clientCounter++;
+				}
+			}
+			if(clientCounter == 0)
+			{
+				framesHist[i].active = 0;
+				free(framesHist[i].msg);
+			}
+		}
+	}
+	return NULL;
+}
+//==========================================================================//
+
 
 //============================ Fonctions ===================================//
 
+/**
+ * Initialisation
+ */
 void init()
 {
 	int i,j;
@@ -88,6 +165,7 @@ void init()
 	nbActiveChannels = 0;
 	frameCounter = 1;
 
+	//Initialisation de la liste des clients : -1 = pas de client
 	for(i=0 ; i<MAX_CLIENTS ; i++)
 	{
 		clients[i].idClient = -1;
@@ -95,6 +173,7 @@ void init()
 		clients[i].isAlive = '0';
 	}
 
+	//Initialisation de la liste des salons : -1 = salon inexistant
 	for(i=0 ; i<MAX_CHANNELS ; i++)
 	{
 		channels[i].idChannel = -1;
@@ -102,6 +181,7 @@ void init()
 		channels[i].nbClients = 0;
 	}
 
+	//Initialisation de la pile des message à traiter
 	for(i=0 ; i<FRAME_HIST_LEN ; i++)
 	{
 		framesHist[i].active = 0;
@@ -113,13 +193,18 @@ void init()
 
 	mkdir("channels", S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
 }
-
+/**
+ * Incrémente le numéro de la trame à envoyer
+ */
 int incFrameCounter()
 {
 	frameCounter = (frameCounter + 1) %FRAME_HIST_LEN;
 	return frameCounter;
 }
 
+/**
+ * Convertie la date courante en string format dd-mm-yyyy hh:min:sec
+ */
 char* time2string()
 {
 	char* stringTime = malloc(20);
@@ -130,6 +215,11 @@ char* time2string()
     return stringTime;
 }
 
+/**
+ *param *s : string à envoyer
+ *param stringSize : nombre de caractères
+ *return check sum du message
+ */
 unsigned char getChecksum(char*s, int stringSize)
 {
 	unsigned char sum = 0;
@@ -147,16 +237,26 @@ unsigned char getChecksum(char*s, int stringSize)
 }
 
 
-
+/**
+ * Envoi une chaîne de caractère à un client
+ * param msg : message à envoyer
+ * param idClient : id du destinataire
+ * sockaddr_client : socket du destinataire
+ */
 void send2Client(char* msg, int idClient, struct sockaddr_in sockaddr_client)
 {
 	char finalMsg[MAX_MSG];
 	int i;
+
+
+	//Calcul du check sum pour la trame à envoyer
 	sprintf(finalMsg,"%s%c%u%c", msg,0x01, incFrameCounter(),0x01);
-	
 	unsigned char chkSum = getChecksum(msg, strlen(msg));
 
+	//Concatenation de la trame
 	sprintf(finalMsg,"%s%c", finalMsg, chkSum);
+
+	//Si ACK
 	if(idClient != -1)
 	{
 		framesHist[frameCounter].msg = finalMsg;
@@ -170,6 +270,7 @@ void send2Client(char* msg, int idClient, struct sockaddr_in sockaddr_client)
 	}
 	printf("\n");
 
+	//Envoi du message
 	sendto(sd, finalMsg, strlen(finalMsg), 0, (struct sockaddr *)&sockaddr_client, addr_len);
 }
 
@@ -260,6 +361,11 @@ int CHANNEL_JoinClient(int idClient, char* idChannel_s_ptr)
 	return idChannel_i;
 }
 
+/**
+ * Supprime un client d'un salon
+ * param idClient
+ * param idChannel
+ */
 int CHANNEL_LeaveClient(int idClient, int idChannel)
 {
 	int i;
@@ -275,7 +381,12 @@ int CHANNEL_LeaveClient(int idClient, int idChannel)
 	return 1;
 }
 
-// Return the idClient
+/**
+ * Gere les client lors d'une demande de connexion
+ * param clientNamePtr : nom du client
+ * param sockaddr_client : socket du client
+ * return id du client
+ */
 int acceptClient(char* clientNamePtr, struct sockaddr_in sockaddr_client)
 {
 	int i;
@@ -325,6 +436,10 @@ int acceptClient(char* clientNamePtr, struct sockaddr_in sockaddr_client)
 	return result;
 }
 
+/**
+ * Supprime un client du serveur et de tout les salons
+ * param clientNB : id du client
+ */
 int disconnectClient(int clientNB)
 {
 	int i;
@@ -343,71 +458,12 @@ int disconnectClient(int clientNB)
 	return 0;
 }
 
-void * threadTimeOutChecker(void* arg)
-{
-	int i=0;
-	while(1)
-	{
-		sleep(10);
 
-		for(i=0 ; i<MAX_CLIENTS ; i++)
-		{
-			if(getIdClient(i) >= 0)
-			{
-				clients[i].isAlive = 0;
-				char aliveMsg[7];
-				sprintf(aliveMsg, "ALIVE");
-				send2Client(aliveMsg, i, clients[i].client_addr);
-			}
-		}
-		sleep(2);
-
-		for(i=0 ; i<MAX_CLIENTS ; i++)
-		{
-			if(getIdClient(i) >= 0 && clients[i].isAlive==0)
-			{
-				// TIMEOUT !!
-				disconnectClient(i);
-			}
-		}
-	}
-
-	return NULL;
-}
-
-void * threadAckSystem(void * arg)
-{
-	int i, j;
-	while(1)
-	{
-		sleep(1);
-		for(i=0 ; i<FRAME_HIST_LEN && framesHist[i].active == 1 ; i++)
-		{
-			int clientCounter = 0;
-			for(j=0 ; j<MAX_CLIENTS ; j++)
-			{
-				if(framesHist[i].clientAcked[j] == 1)
-				{
-					framesHist[i].clientAcked[j]++;
-					clientCounter++;
-				}
-				else if(framesHist[i].clientAcked[j] == 2)
-				{
-					framesHist[i].clientAcked[j] = 1;
-					sendto(sd, framesHist[i].msg, strlen(framesHist[i].msg), 0, (struct sockaddr *)&clients[j].client_addr, addr_len);
-					clientCounter++;
-				}
-			}
-			if(clientCounter == 0)
-			{
-				framesHist[i].active = 0;
-				free(framesHist[i].msg);
-			}
-		}
-	}
-	return NULL;
-}
-
+/**
+ * retransmet un message en provenance d'un client à tous les autres
+ * param idClient : auteur du message
+ * param idChannel : salon de destination
+ */
 void transmit(int idClient, int msg_type, int idChannel, char* message)
 {
 	char finalMsg[MAX_MSG];
@@ -442,6 +498,7 @@ void transmit(int idClient, int msg_type, int idChannel, char* message)
 	}
 }
 
+
 int manageMsg(int idClient, int idChannel, char* msg)
 {
 	int result = -1;
@@ -471,6 +528,7 @@ int manageMsg(int idClient, int idChannel, char* msg)
 	}
 	return result;
 }
+
 
 void ack_frame(int idFrame, int idClient, int cmd_i, char* cmd_s, struct sockaddr_in sockaddr_client,int result)
 {
@@ -511,6 +569,9 @@ void analyzeAck(int idClient, int idFrame)
 	}
 }
 
+/**
+ * Décortique les messages reçus
+ */
 void analyzeFrame(char* rcvdFrameFromCall, struct sockaddr_in addr_client_frame)
 {
 	/*
