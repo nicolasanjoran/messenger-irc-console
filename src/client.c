@@ -14,6 +14,7 @@
 //========================== DEFINES =======================================//
 #define clrscr() printf("\033[H\033[2J")
 #define couleur(param) printf("\033[%sm",param)
+
 #define SERVER_PORT 1500
 #define MAX_MSG 100
 #define MAX_CHANNELS 10
@@ -98,6 +99,8 @@ void GRAPH_init();
 void GRAPH_print();
 
 void GRAPH_PrintSeparator(char separator);
+
+void analyzeMessage(char* frame);
 //==========================================================================//
 
 
@@ -112,13 +115,14 @@ int main (int argc, char *argv[])
 	idClient = -1;
 	printf("Choisissez un pseudo : \n");
 	fgets(nickname,50,stdin);
+
 	if(strlen(nickname)>0)
 	{
 		nickname[strlen(nickname)-1] = '\0';
 	}
 
 	SERVER_Connect();
-	
+
 	GRAPH_init();
 	//callback
 	while(1)
@@ -127,7 +131,7 @@ int main (int argc, char *argv[])
 		sleep(5);
 
 		//TODO: Implement printInterface()
-		//scanf("%s",msgbuf);
+		scanf("%s",msgbuf);
 	}
 
 
@@ -477,6 +481,58 @@ void ack_frame(int idFrame, int cmd_i, char* cmd_s, int result)
 
 	send2Server(rsp);
 }
+void analyzeMessage(char* frame)
+{
+	char cmdFrame[MAX_MSG];
+	char parameter[MAX_MSG];
+
+
+	strcpy(cmdFrame, frame);
+
+	printf("msg ecrit : %s",cmdFrame);
+
+	if(strncmp(cmdFrame,"JOIN",strlen("JOIN")) == 0){
+
+		if(strlen(cmdFrame) > strlen("JOIN")+1)
+		{
+			strncpy(parameter, cmdFrame + strlen("JOIN")+1,strlen(cmdFrame) - strlen("JOIN"));
+			//CHANNEL_Join(parameter);
+			printf("Cmd JOIN : %s\n",parameter);
+		}
+		else
+		{
+			printf("Paramètre non valide \n");
+		}
+	}
+	else if(strncmp(cmdFrame,"LEAVE",strlen("LEAVE")) == 0)
+	{
+		//CHANNEL_Leave()
+	}
+	else if(strncmp(cmdFrame,"DISCONNECT",strlen("DISCONNECT")) == 0)
+	{
+
+		//SERVER_Disconnect();
+
+	}
+	else if(strncmp(cmdFrame,"NEXT",strlen("NEXT")) == 0)
+	{
+		if(strlen(cmdFrame) > strlen("NEXT")+1)
+		{
+			//next()
+		}
+		else
+		{
+			printf("Paramètre non valide \n");
+		}
+	}
+	else
+	{
+		//say();
+		printf("Cmd say : %s\n",cmdFrame);
+	}
+
+}
+
 
 //========================== CMD =======================================//
 
@@ -496,31 +552,31 @@ void say(char* message){
 void GRAPH_init()
 {
 	FILE *fp;
-  	char columns_nb[5];
-  	char lines_nb[5];
-  	fp = popen("tput cols", "r");
-  	if(fp == NULL)
-  	{
-  		perror("Cannot get terminal width.");
-  	}else{
-  		while(fgets(columns_nb, sizeof(columns_nb), fp) != NULL)
-  			gterm.width = atoi(columns_nb);
-  	}
-  	pclose(fp);
+	char columns_nb[5];
+	char lines_nb[5];
+	fp = popen("tput cols", "r");
+	if(fp == NULL)
+	{
+		perror("Cannot get terminal width.");
+	}else{
+		while(fgets(columns_nb, sizeof(columns_nb), fp) != NULL)
+			gterm.width = atoi(columns_nb);
+	}
+	pclose(fp);
 
-  	fp = popen("tput lines", "r");
-  	if(fp == NULL)
-  	{
-  		perror("Cannot get terminal height.");
-  	}else{
-  		while(fgets(lines_nb, sizeof(lines_nb), fp) != NULL)
-  			gterm.height = atoi(lines_nb);
-  	}
-  	pclose(fp);
+	fp = popen("tput lines", "r");
+	if(fp == NULL)
+	{
+		perror("Cannot get terminal height.");
+	}else{
+		while(fgets(lines_nb, sizeof(lines_nb), fp) != NULL)
+			gterm.height = atoi(lines_nb);
+	}
+	pclose(fp);
 
 	gterm.sidebar_width=20;
 
-	
+
 }
 
 void GRAPH_println(char*msg, int line)
