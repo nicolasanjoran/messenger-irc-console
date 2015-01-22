@@ -390,7 +390,6 @@ void CHANNEL_Join(char* channel){
 	channels[idChannel].idChannel = idChannel;
 	channels[idChannel].name = idChannel_s;
 	channels[idChannel].file = open(filename, O_CREAT | O_RDWR, 0666);
-	printf("Connecté au serveur");
 	currentChannel = idChannel;
 }
 
@@ -641,7 +640,7 @@ void say(char* message){
 		send2Server(finalMsg);
 		//Ecrit dans l'historique
 		sprintf(finalMsg, "<<%s> -- %s> %s\n", nickname, time2string(), message);
-		if(write(channels[currentChannel].file, message, strlen(message)) < 0)
+		if(write(channels[currentChannel].file, finalMsg, strlen(finalMsg)) < 0)
 		{
 			perror("write");
 		}
