@@ -501,15 +501,14 @@ void analyzeMessage(char* frame)
 
 	strcpy(cmdFrame, frame);
 
-	printf("msg ecrit : %s",cmdFrame);
-
+	//Cherche si une commande a été tapée en premier
 	if(strncmp(cmdFrame,"JOIN",strlen("JOIN")) == 0){
 
 		if(strlen(cmdFrame) > strlen("JOIN")+1)
 		{
+			//Joint le salon précisé après la commande JOIN
 			strncpy(parameter, cmdFrame + strlen("JOIN")+1,strlen(cmdFrame) - strlen("JOIN"));
 			CHANNEL_Join(parameter);
-			printf("Cmd JOIN : %s\n",parameter);
 		}
 		else
 		{
@@ -522,9 +521,7 @@ void analyzeMessage(char* frame)
 	}
 	else if(strncmp(cmdFrame,"DISCONNECT",strlen("DISCONNECT")) == 0)
 	{
-
 		SERVER_Disconnect();
-
 	}
 	else if(strncmp(cmdFrame,"NEXT",strlen("NEXT")) == 0)
 	{
@@ -540,7 +537,6 @@ void analyzeMessage(char* frame)
 	else
 	{
 		say(cmdFrame);
-		printf("Cmd say : %s\n",cmdFrame);
 	}
 
 }
@@ -550,15 +546,20 @@ void analyzeMessage(char* frame)
 
 void say(char* message){
 	char finalMsg[MAX_MSG];
+
 	if(currentChannel >= 0)
 	{
-		sprintf(finalMsg,"SAY%c%d%c%d%c%s",0x01,idClient,0x01,currentChannel,0x01,finalMsg);
+		//Contruit la chaine à envoyer
+		sprintf(finalMsg,"SAY%c%d%c%d%c%s",0x01,idClient,0x01,currentChannel,0x01,message);
+
 		send2Server(finalMsg);
-		sprintf(finalMsg, "<<%s> -- %s> %s\n", nickname, time2string(), finalMsg);
+		//Ecrit dans l'historique
+		sprintf(finalMsg, "<<%s> -- %s> %s\n", nickname, time2string(), message);
 		if(write(channels[currentChannel].file, message, strlen(message)) < 0)
 		{
 			perror("write");
 		}
+
 	}
 	else
 	{
@@ -646,6 +647,7 @@ void GRAPH_print()
 void transmit(int idChannel, char* message){
 
 	int result;
+
 	if(channels[idChannel].idChannel != -1)
 	{
 		if((result = write(channels[idChannel].file, message, strlen(message))) < 0)
