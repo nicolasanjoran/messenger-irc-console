@@ -123,7 +123,7 @@ int main (int argc, char *argv[])
 	}
 
 	SERVER_Connect();
-	/*
+
 	GRAPH_init();
 	//callback
 	while(1)
@@ -134,14 +134,14 @@ int main (int argc, char *argv[])
 		//TODO: Implement printInterface()
 		scanf("%s",msgbuf);
 	}
-	 */
+	 /*
 	while(1)
 	{
 		fgets(msgbuf,MAX_MSG,stdin);
 		msgbuf[strlen(msgbuf)-1] = '\0';
 		analyzeMessage(msgbuf);
 	}
-
+*/
 	close(sd);
 	return 0;
 }
