@@ -12,6 +12,8 @@
 #include <pthread.h>
 
 //========================== DEFINES =======================================//
+#define clrscr() printf("\033[H\033[2J")
+#define couleur(param) printf("\033[%sm",param)
 #define SERVER_PORT 1500
 #define MAX_MSG 100
 #define MAX_CHANNELS 10
@@ -45,7 +47,7 @@ struct frameStruct{
 
 struct channel channels[MAX_CHANNELS];
 struct frameStruct framesHist[FRAME_HIST_LEN];
-int idClient, sd, frameCounter;
+int idClient, sd, frameCounter, currentChannel;
 struct sockaddr_in client_addr, serv_addr;
 char nickname[50];
 char addr[20];
@@ -90,8 +92,8 @@ int main (int argc, char *argv[])
 	int i;
 	char msgbuf[MAX_MSG];
 	frameCounter = 0;
+	currentChannel = -1;
 	idClient = -1;
-	//
 	printf("Choisissez un pseudo : \n");
 	fgets(nickname,50,stdin);
 	if(strlen(nickname)>0)
@@ -101,9 +103,6 @@ int main (int argc, char *argv[])
 
 	SERVER_Connect();
 	
-	
-	
-
 	
 	//callback
 	while(1)
@@ -233,7 +232,7 @@ int  SERVER_Connect(){
 
 	sprintf(finalMsg,"CONNECT%c%s", 0x01, nickname );
 	result = send2Server(finalMsg);
-	
+
 	printf("Trying to connect...\n");
 	while(framesHist[result].serverAcked != 0);
 	idClient = framesHist[result].resp;
@@ -393,7 +392,7 @@ int analyzeFrame(char* frame)
 			totalExtracted = 0;
 		}else
 		{
-			printf("idFrame: %s\n", extractedFrame[totalExtracted-2]);
+			printf("idFrame: %d\n", atoi(extractedFrame[totalExtracted-2]));
 			rcvdIdFrame = atoi(extractedFrame[totalExtracted-2]);
 		}
 	}
@@ -440,28 +439,6 @@ int analyzeFrame(char* frame)
 	return result;
 }
 
-void transmit(int idChannel, char* message){
-
-	int result;
-	if(channels[idChannel].idChannel != -1)
-	{
-		if((result = write(channels[idChannel].file, message, strlen(message))) < 0)
-		{
-			perror("write");
-		}
-		else
-		{
-			//TODO: ACK
-		}
-	}
-	else
-	{
-		//channel not joined
-	}
-
-}
-
-
 void ack_frame(int idFrame, int cmd_i, char* cmd_s, int result)
 {
 	char rsp_value[10];
@@ -480,7 +457,39 @@ void ack_frame(int idFrame, int cmd_i, char* cmd_s, int result)
 	sprintf(rsp, "ACK%c%d%c%d%c%s%c", (char)0x01,idClient,0x01, idFrame, (char)0x01, rsp_value, 0x01);
 
 	send2Server(rsp);
-
 }
 
+//========================== CMD =======================================//
 
+void say(char* message){
+	char finalMsg[MAX_MSG];
+	if(currentChannel >= 0)
+	{
+		sprintf(finalMsg,"SAY%c%d%c%d%c%s",0x01,idClient,0x01,currentChannel,0x01,finalMsg);
+		send2Server(finalMsg);
+	}
+	else
+	{
+		printf("Vous n'êtes pas dans un salon");
+	}
+}
+
+void transmit(int idChannel, char* message){
+
+	int result;
+	if(channels[idChannel].idChannel != -1)
+	{
+		if((result = write(channels[idChannel].file, message, strlen(message))) < 0)
+		{
+			perror("write");
+		}
+		else
+		{
+			//TODO: ACK
+		}
+	}
+	else
+	{
+		//channel not joined
+	}
+}
