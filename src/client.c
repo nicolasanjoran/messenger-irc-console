@@ -45,14 +45,24 @@ struct frameStruct{
 	// 2: Server has waited for 1s, re-try to send frame.
 };
 
+struct Gterm{
+	int width;
+	int height;
+	int sidebar_width;
+};
+
 struct channel channels[MAX_CHANNELS];
 struct frameStruct framesHist[FRAME_HIST_LEN];
+
+struct Gterm gterm;
+
 int idClient, sd, frameCounter, currentChannel;
 struct sockaddr_in client_addr, serv_addr;
 char nickname[50];
 char addr[20];
 pthread_t pthreadReceiver, pthreadAckSystem;
 socklen_t addr_len;
+
 //==========================================================================//
 
 
@@ -82,6 +92,12 @@ void ack_frame(int idFrame, int cmd_i, char* cmd_s, int result);
 void * threadAckSystem(void * arg);
 
 void * threadReceiver(void * arg);
+
+void GRAPH_init();
+
+void GRAPH_print();
+
+void GRAPH_PrintSeparator(char separator);
 //==========================================================================//
 
 
@@ -103,12 +119,15 @@ int main (int argc, char *argv[])
 
 	SERVER_Connect();
 	
-	
+	GRAPH_init();
 	//callback
 	while(1)
 	{
+		GRAPH_print();
+		sleep(5);
+
 		//TODO: Implement printInterface()
-		scanf("%s",msgbuf);
+		//scanf("%s",msgbuf);
 	}
 
 
@@ -473,6 +492,85 @@ void say(char* message){
 		printf("Vous n'êtes pas dans un salon");
 	}
 }
+
+void GRAPH_init()
+{
+	FILE *fp;
+  	char columns_nb[5];
+  	char lines_nb[5];
+  	fp = popen("tput cols", "r");
+  	if(fp == NULL)
+  	{
+  		perror("Cannot get terminal width.");
+  	}else{
+  		while(fgets(columns_nb, sizeof(columns_nb), fp) != NULL)
+  			gterm.width = atoi(columns_nb);
+  	}
+  	pclose(fp);
+
+  	fp = popen("tput lines", "r");
+  	if(fp == NULL)
+  	{
+  		perror("Cannot get terminal height.");
+  	}else{
+  		while(fgets(lines_nb, sizeof(lines_nb), fp) != NULL)
+  			gterm.height = atoi(lines_nb);
+  	}
+  	pclose(fp);
+
+	gterm.sidebar_width=20;
+
+	
+}
+
+void GRAPH_println(char*msg, int line)
+{
+	int i=0;
+	printf("| ");
+	while(i<strlen(msg) && i<gterm.width-gterm.sidebar_width-1)
+	{
+		printf("%c", msg[i]);
+		i++;
+	}
+	while(i<gterm.width-gterm.sidebar_width-1)
+	{
+		printf(" ");
+		i++;
+	}
+	printf("#");
+	if(line==0)
+	{
+		for(i=0 ; i<(gterm.sidebar_width-7)/2 ; i++) printf(" ");
+		printf("CLIENTS\n");
+	}else{
+		for(i=0 ; i<gterm.sidebar_width-2 ; i++) printf(" ");
+	}
+}
+
+void GRAPH_PrintSeparator(char separator)
+{
+	int i;
+	for(i=0; i<gterm.width ; i++)
+	{
+		printf("%c", separator);
+	}
+}
+
+void GRAPH_print()
+{
+	int i;
+	system("clear");
+	GRAPH_PrintSeparator('-');
+
+	for (i = 0; i < gterm.height-4; i++)
+	{
+		GRAPH_println("test!!", i);
+	}
+
+
+}
+
+
 
 void transmit(int idChannel, char* message){
 
