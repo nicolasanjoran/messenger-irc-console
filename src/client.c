@@ -137,6 +137,7 @@ int main (int argc, char *argv[])
 
 	for(j=0 ; j<MAX_CHANNELS ; j++)
 	{
+		channels[j].idChannel = -1;
 		channels[j].msgs = malloc(100*sizeof(char*));
 		channels[j].idMsg = 0;
 		for(k = 0 ; k<100 ; k++)
@@ -750,7 +751,26 @@ void GRAPH_println(char*msg, int line)
 	{
 		for(i=0 ; i<gterm.sidebar_width-2 ; i++) printf("-");
 	}else{
-		for(i=0 ; i<gterm.sidebar_width-2 ; i++) printf(" ");
+		int j,k=1;
+		char found=0;
+		for(j=0 ; j<MAX_CHANNELS ; j++)
+		{
+			if(channels[j].idChannel != -1)
+			{
+				k++;
+			}
+			if(k+2==line)
+			{
+				found=1;
+				break;
+			}
+		}
+		if(found==1)
+		{
+			printf("%s\n", channels[j].name);
+		}else{
+			for(i=0 ; i<gterm.sidebar_width-2 ; i++) printf(" ");
+		}
 	}
 }
 
