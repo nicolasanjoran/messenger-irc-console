@@ -876,9 +876,6 @@ void GRAPH_print()
 			GRAPH_println("", i);
 		}
 	}
-
-
-
 	
 	GRAPH_PrintSeparator('-', NULL);
 	printf(" >> %s\n", input);
@@ -891,7 +888,7 @@ void GRAPH_print()
 
 void incCurrentChannel()
 {
-	int i=0;
+	int i=1;
 	int nbchannel = currentChannel;
 	int result  = -1;
 	if(nbchannel == -1) nbchannel = 0;
@@ -899,7 +896,7 @@ void incCurrentChannel()
 	{
 		if(channels[(i+nbchannel)%MAX_CHANNELS].idChannel != -1)
 		{
-			result = channels[(i+nbchannel)%MAX_CHANNELS].idChannel;
+			result = (i+nbchannel)%MAX_CHANNELS;
 			break;
 		}
 	}
@@ -907,6 +904,7 @@ void incCurrentChannel()
 	{
 		currentChannel = result;
 	}
+	printf("currentChannel: %d\n", currentChannel);
 }
 
 void transmit(int idChannel, char* message){
