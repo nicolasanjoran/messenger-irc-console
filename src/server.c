@@ -509,7 +509,7 @@ int manageMsg(int idClient, int idChannel, char* msg)
 	if(CHANNEL_getID(idChannel)>=0 && getIdClient(idClient)>=0)
 	{
 		sprintf(finalMsg, "<<%s> -- %s>", clients[idClient].name, time2string());
-		sprintf(finalMsg, "%s %s\n", finalMsg, msg);
+		sprintf(finalMsg, "%s %s", finalMsg, msg);
 		/*
 		for (j = 0; j*100+i < msgLen ; j++)
 		{

@@ -1,3 +1,5 @@
+
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -33,6 +35,8 @@
 #define FRAME_HIST_LEN 500
 
 #define MAX_INPUT 300
+
+
 //==========================================================================//
 
 //=========================== GLOBAL VARs & Types ==========================//
@@ -40,7 +44,8 @@ struct channel {
 	int idChannel;
 	char* name;
 	int file;
-
+	char**msgs;
+	int idMsg;
 };
 
 struct frameStruct{
@@ -123,14 +128,26 @@ char* time2string();
 int main (int argc, char *argv[])
 {
 
-	int i;
+	int i,j,k;
 	inputIdx = 0;
 	char msgbuf[MAX_MSG];
 	frameCounter = 0;
 	currentChannel = -1;
 	idClient = -1;
+
+	for(j=0 ; j<MAX_CHANNELS ; j++)
+	{
+		channels[j].msgs = malloc(100*sizeof(char*));
+		channels[j].idMsg = 0;
+		for(k = 0 ; k<100 ; k++)
+		{
+			channels[j].msgs[k] = malloc(MAX_MSG*sizeof(char));
+		}
+	}
+
 	printf("Choisissez un pseudo : \n");
 	fgets(nickname,50,stdin);
+
 
 	if(strlen(nickname)>0)
 	{
@@ -392,7 +409,7 @@ void CHANNEL_Join(char* channel){
 	sprintf(filename,"channels/%s.hist",idChannel_s);
 	channels[idChannel].idChannel = idChannel;
 	channels[idChannel].name = idChannel_s;
-	channels[idChannel].file = open(filename, O_CREAT | O_RDWR, 0666);
+	channels[idChannel].file = open(filename,O_CREAT | O_RDWR, 0666);
 	currentChannel = idChannel;
 }
 
@@ -739,17 +756,83 @@ void GRAPH_PrintSeparator(char separator, char* msg)
 
 void GRAPH_print()
 {
-	int i;
+	int i,j,start=-1;
+	size_t len=MAX_MSG;
 
 	GRAPH_init();
-
+	int idx = 0;
+	//char** messages;
 	system("clear");
 	GRAPH_PrintSeparator('-', "[MESSENGER 1.0]");
-
-	for (i = 0; i < gterm.height-4; i++)
+	/*for(j=0 ; j<=gterm.height-4 ; j++)
 	{
-		GRAPH_println("test!!", i);
+		messages[j] = malloc(MAX_MSG*sizeof(char));
+	}*/
+	if(currentChannel!=-1)
+	{
+		//messages = channels[currentChannel].msgs;
+		//printf("idx: %d", channels[currentChannel].idMsg);
+		idx = channels[currentChannel].idMsg;
+		/*const char delimiter = '\n';
+		int nbread;
+		FILE * filedesc;
+		char * filename = malloc(strlen(channels[currentChannel].name)+15);
+		sprintf(filename,"channels/%s.hist",channels[currentChannel].name);
+		filedesc = fopen(filename, "r");
+		//while(fscanf(filedesc, "%[^\n]", messages[idx])!=EOF)
+		while(nbread=getline(&messages[idx], &len, filedesc) > 0)
+		{
+			
+			messages[idx] = strtok(messages[idx], &delimiter);
+			printf("strlen: %lu idx: %d, rd: %d %s\n",strlen(messages[idx]),idx, nbread, messages[idx]);
+			idx = (idx+1)%(gterm.height-4);
+			
+			
+		}*/
+		int nbLignes = 0;
+		/*for(j=0 ; j<=100 && nbLignes <= 100  ; j++)
+		{
+			if(messages[(idx-j+100)%100] != NULL)
+			{
+				nbLignes += strlen(messages[(idx-j+100)%100])/(gterm.width-gterm.sidebar_width-3);
+			}
+		}*/
+		
+		start = (idx-gterm.height+3+100)%100;
+		int end = (idx);
+		//printf("start: %d, end: %d\n", start, (start+gterm.height+100)%100);
+		//printf("nblignes: %d\n", nbLignes);
+
+		if(start==-1) start=0;
+		int lines = 0;
+		for (i = start; i != end; i=(i+1)%100)
+		{
+			//GRAPH_println("test!!", i);
+			//printf("%s", channels[currentChannel].msgs[(start+i)%100]);
+			if(channels[currentChannel].msgs[i] != NULL)
+			{
+				GRAPH_println(channels[currentChannel].msgs[i], lines);
+				lines++;
+				//printf("%s\n", messages[(start+i)%100]);
+				//printf("t\n");
+				//GRAPH_println("t", i);
+			}
+			else
+			{
+				//GRAPH_println("", i);
+			}
+			//printf("%s\n", messages[(start+i)%gterm.height-4]);
+		}
+	}else{
+		for(i=0 ; i<=gterm.height-4 ; i++)
+		{
+			GRAPH_println("", i);
+		}
 	}
+
+
+
+	
 	GRAPH_PrintSeparator('-', NULL);
 	printf(" >> %s", input);
 
@@ -783,18 +866,24 @@ void incCurrentChannel()
 void transmit(int idChannel, char* message){
 
 	int result;
+	
 
 	if(channels[idChannel].idChannel != -1)
 	{
-		if((result = write(channels[idChannel].file, message, strlen(message))) < 0)
+		strcpy(channels[idChannel].msgs[channels[idChannel].idMsg], message);
+		printf("%s id:%d\n", channels[idChannel].msgs[channels[idChannel].idMsg],channels[idChannel].idMsg);
+		channels[idChannel].idMsg = (channels[idChannel].idMsg + 1)%100;
+
+		/*if((result = write(channels[idChannel].file, message, strlen(message))) < 0)
 		{
 			perror("write");
-		}
+		}*/
 	}
 	else
 	{
 		//channel not joined
 	}
+	GRAPH_print();
 }
 
 char* time2string()
