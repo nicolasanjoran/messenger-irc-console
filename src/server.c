@@ -10,33 +10,8 @@
 #include <sys/stat.h>
 #include <time.h>
 #include <pthread.h>
+#include "protocole.h"
 
-//========================== DEFINES =======================================//
-#define SERVER_PORT 1500
-#define MAX_MSG 1500
-#define MAX_CLIENTS 100
-#define MAX_CLIENTS_digits 3
-#define MAX_CHANNELS 10
-
-#define CMD_CONNECT 1
-#define CMD_JOIN 2
-#define CMD_SAY 3
-#define CMD_LEAVE 4
-#define CMD_DISCONNECT 5
-#define CMD_ACK 6
-
-#define TRANSMIT_ALL -123
-#define MSG_CLIENTS 0
-#define MSG_TEXT 1
-#define MSG_HIST 2
-
-#define FRAME_HIST_LEN 500
-
-//==========================================================================//
-
-/*
- * TODO: Commands history, for re-sending them if not acked.
- */
 
 //=========================== GLOBAL VARs & Types ==========================//
 struct channel {
@@ -502,7 +477,7 @@ void transmit(int idClient, int msg_type, int idChannel, char* message)
 int manageMsg(int idClient, int idChannel, char* msg)
 {
 	int result = -1;
-	int i=0,j=0;
+	int j=0;
 	char finalMsg[MAX_MSG];
 	int msgLen = strlen(msg);
 	printf("msgLen=%d\n", msgLen);
@@ -627,7 +602,6 @@ void analyzeFrame(char* rcvdFrameFromCall, struct sockaddr_in addr_client_frame)
 		 */
 		 //printf("rcvdFrameLen: %d\n", strlen(frameCopy));
 		printf("Processed checksum: %x    ::  Actual:%x\n",getChecksum(frameCopy, strlen(frameCopy)-1), (unsigned char)frameCopy[strlen(frameCopy)-1]);
-		//TODO Uncomment checksum checkers !!!
 		if(0)//(unsigned char)extractedFrame[totalExtracted-1][0] != getChecksum(rcvdFrame, strlen(rcvdFrame)-1))
 		{
 			totalExtracted = 0;
@@ -684,7 +658,6 @@ void analyzeFrame(char* rcvdFrameFromCall, struct sockaddr_in addr_client_frame)
 
 }
 
-int printStatus();
 //==========================================================================//
 
 

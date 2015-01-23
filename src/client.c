@@ -13,31 +13,9 @@
 #include <time.h>
 #include <pthread.h>
 #include <termios.h>
-
-//========================== DEFINES =======================================//
-
-#define NB_ENABLE 1
-#define NB_DISABLE 2
-#define clrscr() printf("\033[H\033[2J")
-#define couleur(param) printf("\033[%sm",param)
-
-#define SERVER_PORT 1500
-#define MAX_MSG 100
-#define MAX_CHANNELS 10
-#define TIMEOUT 10
-
-#define CMD_CONNECT 1
-#define CMD_JOIN 2
-#define CMD_ACK 3
-#define CMD_TRANSMIT 4
-#define CMD_ALIVE 5
-
-#define FRAME_HIST_LEN 500
-
-#define MAX_INPUT 300
+#include "protocole.h"
 
 
-//==========================================================================//
 
 //=========================== GLOBAL VARs & Types ==========================//
 struct channel {
@@ -92,8 +70,6 @@ void CHANNEL_Join(char* channel);
 void CHANNEL_Leave();
 
 int send2Server(char *s);
-
-void printInterface();
 
 unsigned char getChecksum(char*s, int stringSize);
 
@@ -201,9 +177,7 @@ int main (int argc, char *argv[])
 			GRAPH_print();
 			fflush(stdin);
 		}
-		//printf("%s\n", tab);
-		//TODO: Implement printInterface()
-		//scanf("%s",msgbuf);
+
 	}
 	 /*
 	while(1)
@@ -551,11 +525,7 @@ int analyzeFrame(char* frame)
 	 */
 	if(totalExtracted >= 3)
 	{
-		/*
-		 * Checksum processing
-		 */
-		//printf("Processed checksum: %x    ::  Actual:%x\n",getChecksum(rcvdFrame, strlen(rcvdFrame)-1), (unsigned char)extractedFrame[totalExtracted-1][0]);
-		//TODO Uncomment checksum checkers !!!
+
 		if(0)//(unsigned char)extractedFrame[totalExtracted-1][0] != getChecksum(rcvdFrame, strlen(rcvdFrame)-1))
 		{
 			totalExtracted = 0;
