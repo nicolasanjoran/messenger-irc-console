@@ -768,7 +768,9 @@ void GRAPH_println(char*msg, int line)
 		}
 		if(found==1)
 		{
+			if(j==currentChannel) printf("\033[30m\033[47m");
 			printf("%s\n", channels[j].name);
+			couleur("0");
 		}else{
 			for(i=0 ; i<gterm.sidebar_width-2 ; i++) printf(" ");
 		}
@@ -843,7 +845,7 @@ void GRAPH_print()
 			}
 		}*/
 		
-		start = (idx-gterm.height+3+100)%100;
+		start = (idx-gterm.height+4+100)%100;
 		int end = (idx);
 		//printf("start: %d, end: %d\n", start, (start+gterm.height+100)%100);
 		//printf("nblignes: %d\n", nbLignes);
@@ -869,7 +871,7 @@ void GRAPH_print()
 			//printf("%s\n", messages[(start+i)%gterm.height-4]);
 		}
 	}else{
-		for(i=0 ; i<=gterm.height-4 ; i++)
+		for(i=0 ; i<=gterm.height-5 ; i++)
 		{
 			GRAPH_println("", i);
 		}
@@ -879,9 +881,10 @@ void GRAPH_print()
 
 	
 	GRAPH_PrintSeparator('-', NULL);
-	printf(" >> %s", input);
-
+	printf(" >> %s\n", input);
+	GRAPH_PrintSeparator('-', "[Press Tab: Switch channel]");
 	fflush(stdout);
+
 
 
 }
