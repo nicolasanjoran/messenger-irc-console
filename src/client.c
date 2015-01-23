@@ -69,11 +69,11 @@ time_t timestamp;
 struct tm * t;
 struct Gterm gterm;
 
-int idClient, sd, frameCounter, currentChannel;
+int idClient, sd, frameCounter, currentChannel,alive;
 struct sockaddr_in client_addr, serv_addr;
 char nickname[50];
 char addr[20];
-pthread_t pthreadReceiver, pthreadAckSystem;
+pthread_t pthreadReceiver, pthreadAckSystem, pthreadAlive;
 socklen_t addr_len;
 char input[MAX_INPUT];
 int inputIdx;
@@ -310,6 +310,29 @@ void * threadAckSystem(void * arg)
 	}
 }
 
+void * threadAlive(void * arg)
+{
+	int n;
+	int live = 1;
+	char msgbuf[MAX_MSG];
+
+	while(live)
+	{
+		sleep(10000);
+		if(alive == 1)
+		{
+			alive =0;
+		}
+		else
+		{
+			//server disconnected
+			printf("Server closed\n");
+			live = 0;
+			SERVER_Disconnect();
+		}
+	}
+}
+
 void analyzeAck( int idFrame, int resp)
 {
 	if(idFrame >= 0 && idFrame < FRAME_HIST_LEN)
@@ -364,6 +387,7 @@ int  SERVER_Connect(){
 	serv_addr.sin_port = htons(SERVER_PORT);
 	pthread_create(&pthreadReceiver,NULL,threadReceiver,NULL);
 	pthread_create(&pthreadAckSystem,NULL,threadAckSystem,NULL);
+	//pthread_create(&pthreadAlive,NULL,threadAlive,NULL);
 
 	sprintf(finalMsg,"CONNECT%c%s", 0x01, nickname );
 	result = send2Server(finalMsg);
@@ -602,7 +626,7 @@ void analyzeMessage(char* frame)
 {
 	char cmdFrame[MAX_MSG];
 	char parameter[MAX_MSG];
-
+	alive = 1;
 
 	strcpy(cmdFrame, frame);
 
@@ -841,7 +865,6 @@ void GRAPH_print()
 
 }
 
-
 void incCurrentChannel()
 {
 	int i=0;
@@ -861,7 +884,6 @@ void incCurrentChannel()
 		currentChannel = result;
 	}
 }
-
 
 void transmit(int idChannel, char* message){
 
